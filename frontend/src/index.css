@@ -13,6 +13,15 @@
   --green: #4c8b70;
   --green-dark: #356951;
   --green-pale: #e3eee7;
+  --sidebar-bg: #25332e;
+  --sidebar-line: #44524b;
+  --sidebar-text: #e8efeb;
+  --sidebar-muted: #96a59c;
+  --action: #477e65;
+  --action-hover: #356951;
+  --action-soft: #a5c7b3;
+  --field-line: #dfe5df;
+  --surface-subtle: #f2f4f1;
   --coral: #d77b69;
   --amber: #d3a14f;
   --shadow: 0 8px 24px rgb(39 51 46 / 6%);

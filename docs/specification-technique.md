@@ -9,6 +9,8 @@
 
 La configuration de connexion est fournie par `MONGODB_URI` et `MONGO_DATABASE`. Le code ne depend pas d'un nom de replica set ou d'un hote particulier ; une URI de replica set ou de cluster peut etre injectee par l'environnement. `docker compose up -d --build` utilise les valeurs par defaut pour un lancement local.
 
+L'API signe des sessions HS256 dans un cookie `tandem_session` HTTP-only, SameSite Strict. Les mots de passe sont haches en Argon2id. `AUTH_SECRET_KEY` est injectee par l'environnement ; si elle est vide, une cle aleatoire temporaire est generee au demarrage (les sessions deviennent invalides au redemarrage). En production, fournir une cle privee stable et activer `AUTH_COOKIE_SECURE` derriere HTTPS.
+
 ## Documents MongoDB cibles
 
 Les identifiants sont des `ObjectId`. Les dates sont stockees au format BSON Date en UTC. Les exemples ci-dessous sont des objets JSON illustratifs.
@@ -19,9 +21,9 @@ Les identifiants sont des `ObjectId`. Les dates sont stockees au format BSON Dat
 {
   "_id": "ObjectId",
   "name": "Atelier Nord",
-  "slug": "atelier-nord",
-  "created_at": "2026-10-15T10:00:00Z",
-  "updated_at": "2026-10-15T10:00:00Z"
+  "invite_code": "code aleatoire",
+  "owner_id": "ObjectId",
+  "created_at": "2026-10-15T10:00:00Z"
 }
 ```
 
@@ -30,26 +32,16 @@ Les identifiants sont des `ObjectId`. Les dates sont stockees au format BSON Dat
 ```json
 {
   "_id": "ObjectId",
+  "company_id": "ObjectId",
   "email": "lea@example.org",
   "password_hash": "argon2id hash",
   "display_name": "Lea Martin",
+  "role": "owner",
   "created_at": "2026-10-15T10:00:00Z"
 }
 ```
 
-### `memberships`
-
-Une collection distincte permet a un meme compte d'appartenir a plusieurs entreprises sans dupliquer son identite.
-
-```json
-{
-  "_id": "ObjectId",
-  "company_id": "ObjectId",
-  "user_id": "ObjectId",
-  "role": "admin",
-  "created_at": "2026-10-15T10:00:00Z"
-}
-```
+Chaque compte est rattache a une entreprise par `company_id`. Une inscription par code d'invitation cree un utilisateur avec le role `member`; l'inscription qui cree l'entreprise donne le role `owner`.
 
 ### `projects`
 
@@ -86,18 +78,19 @@ Une collection distincte permet a un meme compte d'appartenir a plusieurs entrep
 
 Les valeurs permises pour `status` sont `todo`, `in_progress` et `done`. Les champs `company_id` et `project_id` sont denormalises dans chaque tache pour filtrer et autoriser les requetes sans parcours de collections supplementaire.
 
-## Index proposes
+## Indexes crees par l'API
 
 - `users`: index unique sur `email`.
-- `memberships`: index unique compose `{ company_id: 1, user_id: 1 }`, plus `{ user_id: 1, company_id: 1 }` pour retrouver les entreprises d'un utilisateur.
-- `projects`: `{ company_id: 1, name: 1 }`.
-- `tasks`: `{ company_id: 1, project_id: 1, status: 1 }` et `{ company_id: 1, project_id: 1, created_at: 1 }`.
-- `tasks`: `{ company_id: 1, assignee_id: 1, status: 1 }` pour les vues par responsable.
+- `companies`: index unique sur `invite_code`.
+- `projects`: `{ company_id: 1, member_ids: 1, created_at: 1 }`.
+- `tasks`: `{ company_id: 1, project_id: 1, created_at: 1 }`.
 
 Pour chaque requete, l'API derive l'entreprise autorisee de la session et applique `company_id` dans le filtre MongoDB, y compris pour la modification et la suppression. Elle verifie egalement que le projet et le responsable appartiennent a cette entreprise.
 
-## Etat du prototype
+## Isolation et autorisations
 
-Le code implemente actuellement la collection `tasks` et ses operations de lecture, creation, modification du statut et suppression. Chaque document porte `company_id` et `project_id`, dont les valeurs proviennent de la configuration serveur `DEMO_COMPANY_ID` et `DEFAULT_PROJECT_ID`. Les collections utilisateurs, entreprises, projets, les index de production et l'authentification restent a implementer avant d'activer le multi-tenant.
+Le cookie contient les identifiants du compte et de son entreprise. A chaque requete, l'API verifie la signature puis relit le compte avec les deux identifiants. Les projets sont lus ou modifies uniquement si `company_id` correspond et que l'utilisateur figure dans `member_ids`. Les taches sont toujours requetees avec `company_id` et `project_id`; toute affectation est validee contre les membres du projet. Les routes qui recoivent un identifiant de projet ne l'utilisent jamais seules comme autorisation.
+
+L'API implemente l'inscription d'une entreprise ou l'adhesion par code, la connexion/deconnexion, la liste des membres, le CRUD des tableaux, l'assignation de membres et le CRUD des taches avec responsable. Les roles disponibles sont `owner` et `member`; le createur d'un tableau peut le gerer, tandis que les autres membres conservent les droits de travail dans ce tableau.
 
 MongoDB est lance sans authentification dans le compose de developpement. Il ne doit pas etre expose tel quel en production. Le volume conserve la base lors de `docker compose down`; `docker compose down -v` la supprime.

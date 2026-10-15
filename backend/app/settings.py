@@ -6,8 +6,9 @@ class Settings(BaseSettings):
     mongo_host: str = "localhost"
     mongo_port: int = 27017
     mongo_database: str = "trello"
-    demo_company_id: str = "demo-company"
-    default_project_id: str = "launch"
+    auth_secret_key: str = ""
+    auth_cookie_secure: bool = False
+    auth_session_hours: int = 12
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

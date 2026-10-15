@@ -4,35 +4,28 @@
 
 Tandem est une application web responsive de gestion de projet. Elle reprend le tableau Kanban comme point d'entree et doit, a terme, permettre a plusieurs entreprises de gerer leurs projets, membres et taches sans acceder aux donnees des autres entreprises.
 
-## Version actuelle
+## Fonctionnalites
 
-- Afficher le tableau du projet de demonstration avec les colonnes « A faire », « En cours » et « Termine ».
-- Creer une tache en choisissant son titre et son statut initial.
-- Changer son statut en la deplacant entre les colonnes.
-- Supprimer une tache.
-- Rechercher une tache par son titre.
-- Persister les taches dans MongoDB et conserver les donnees apres redemarrage avec un volume Docker.
-- Signaler l'etat de connexion a l'API et afficher les erreurs de requete.
+- Creer un compte avec nom, email et mot de passe ; l'inscription peut creer une entreprise avec le compte comme administrateur, ou rejoindre une entreprise avec son code d'invitation.
+- Se connecter et se deconnecter ; la session est portee par un cookie HTTP-only signe.
+- Afficher et gerer les tableaux accessibles au compte : creation, renommage et suppression.
+- A la creation ou a la modification d'un tableau, choisir les membres de la meme entreprise qui y ont acces.
+- Creer, modifier et supprimer des taches dans le tableau ouvert.
+- Choisir le statut initial et le responsable parmi les membres du tableau ; modifier le statut par glisser-deposer.
+- Rechercher une tache par son titre et afficher les compteurs Kanban.
+- Enregistrer les entreprises, comptes, tableaux, membres et taches dans MongoDB ; le volume Docker conserve les donnees au redemarrage.
+- Signaler l'etat de connexion et afficher les erreurs de requete.
 
-## Fonctionnalites prevues
+Chaque compte appartient a une seule entreprise dans cette version. Un administrateur peut partager le code d'invitation de son entreprise ; un utilisateur qui le saisit rejoint cette entreprise comme membre.
 
-- Creer, modifier et supprimer des entreprises, des projets et des utilisateurs.
-- Associer chaque projet et chaque utilisateur a une entreprise.
-- Inviter un utilisateur dans une entreprise et gerer ses roles.
-- Ajouter des membres a un projet et assigner chaque tache a un utilisateur.
-- Modifier le titre, la description, le responsable, l'echeance et le statut d'une tache.
-- Proposer des vues tableau et liste, ainsi que des filtres par membre, statut et echeance.
-- Authentifier les utilisateurs et autoriser chaque action selon leur appartenance et leur role.
+## Isolation stricte des entreprises
 
-## Isolation des entreprises
+L'entreprise est determinee a partir de la session signee et du compte relu en base, jamais a partir d'un `company_id` fourni par le navigateur. Chaque lecture, modification et suppression de tableau ou de tache est filtree par l'entreprise. L'API verifie aussi que l'utilisateur appartient au tableau et que le responsable d'une tache appartient a la meme entreprise et au meme tableau. Une ressource d'une autre entreprise est traitee comme introuvable.
 
-Dans la version cible, le serveur determine les entreprises accessibles a partir de l'identite authentifiee. Chaque operation sur un projet ou une tache est limitee cote API a l'entreprise courante ; un identifiant transmis par le navigateur ne constitue jamais une preuve d'autorisation. Les acces hors entreprise doivent echouer sans reveler l'existence de la ressource.
+## Parcours nominal
 
-Le prototype actuel configure un seul espace par `DEMO_COMPANY_ID` cote serveur et n'offre ni comptes ni authentification. Il ne satisfait donc pas encore l'exigence d'isolation multi-entreprises pour une mise en production.
-
-## Parcours nominal cible
-
-1. Un administrateur cree son entreprise et son compte, ou rejoint une entreprise existante.
-2. Il cree un projet et invite les membres de son entreprise.
-3. Les membres consultent le tableau, creent des taches, les assignent et les font progresser entre les statuts.
-4. Les changements sont stockes dans MongoDB et restent limites a l'entreprise autorisee.
+1. L'administrateur cree son compte et son entreprise.
+2. Il partage le code d'invitation ; ses collegues creent leur compte en rejoignant l'entreprise.
+3. Un membre cree un tableau et selectionne les personnes de son entreprise qui y participent.
+4. Les membres creent des taches, les assignent et les font progresser entre les statuts.
+5. MongoDB conserve les donnees et l'API limite chaque operation a l'entreprise et au tableau autorises.

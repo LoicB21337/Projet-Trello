@@ -5,7 +5,14 @@ services:
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand({ ping: 1 }).ok"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "db.adminCommand({ ping: 1 }).ok",
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -19,15 +26,22 @@ services:
       MONGO_HOST: ${MONGO_HOST:-mongo}
       MONGO_PORT: ${MONGO_PORT:-27017}
       MONGO_DATABASE: ${MONGO_DATABASE:-trello}
-      DEMO_COMPANY_ID: ${DEMO_COMPANY_ID:-demo-company}
-      DEFAULT_PROJECT_ID: ${DEFAULT_PROJECT_ID:-launch}
+      AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:-false}
+      AUTH_SESSION_HOURS: ${AUTH_SESSION_HOURS:-12}
     depends_on:
       mongo:
         condition: service_healthy
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=2)",
+        ]
       interval: 10s
       timeout: 3s
       retries: 5
