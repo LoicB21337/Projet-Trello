@@ -1,5 +1,4 @@
 function Topbar({
-  companyName,
   selectedProject,
   loading,
   projectsLoading,
@@ -13,10 +12,10 @@ function Topbar({
       <nav className="breadcrumb" aria-label="Fil d’Ariane">
         {selectedProject ? (
           <a className="breadcrumb-home" href="#home" onClick={onNavigateHome}>
-            {companyName}
+            Accueil
           </a>
         ) : (
-          <span aria-current="page">{companyName}</span>
+          <span aria-current="page">Accueil</span>
         )}
         {selectedProject && (
           <>

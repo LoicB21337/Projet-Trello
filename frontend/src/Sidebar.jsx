@@ -3,16 +3,31 @@ import { useEffect, useRef, useState } from "react";
 function Sidebar({
   session,
   projects,
+  projectsLoading,
   selectedProject,
   connected,
   userInitials,
   companyInitials,
   onNavigateHome,
+  onSelectProject,
   onCopyInviteCode,
   onLogout,
 }) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [projectsExpanded, setProjectsExpanded] = useState(
+    () =>
+      window.localStorage.getItem(
+        `tandem-projects-expanded:${session.user.id}`,
+      ) === "true",
+  );
   const workspaceRef = useRef(null);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      `tandem-projects-expanded:${session.user.id}`,
+      String(projectsExpanded),
+    );
+  }, [projectsExpanded, session.user.id]);
 
   useEffect(() => {
     if (!workspaceOpen) return undefined;
@@ -96,11 +111,12 @@ function Sidebar({
       </div>
       <p className="sidebar-label">ESPACE DE TRAVAIL</p>
       <nav className="sidebar-nav" aria-label="Navigation principale">
-        <a
-          href="#home"
-          className={`nav-link${selectedProject ? "" : " active"}`}
-          aria-current={selectedProject ? undefined : "page"}
-          onClick={onNavigateHome}
+        <button
+          className="nav-link projects-toggle"
+          type="button"
+          aria-expanded={projectsExpanded}
+          aria-controls="sidebar-project-list"
+          onClick={() => setProjectsExpanded((expanded) => !expanded)}
         >
           <span className="nav-symbol board-symbol" aria-hidden="true">
             <i />
@@ -109,16 +125,39 @@ function Sidebar({
           </span>
           <span>Mes tableaux</span>
           <span className="nav-count">{projects.length}</span>
-        </a>
-        {selectedProject && (
-          <a href="#board" className="nav-link active" aria-current="page">
-            <span className="nav-symbol board-symbol" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-            <span>{selectedProject.name}</span>
-          </a>
+          <span className="projects-chevron" aria-hidden="true">
+            ⌄
+          </span>
+        </button>
+        {projectsExpanded && (
+          <div className="sidebar-projects" id="sidebar-project-list">
+            {projectsLoading ? (
+              <p className="sidebar-projects-empty">Chargement…</p>
+            ) : projects.length > 0 ? (
+              projects.map((project) => (
+                <button
+                  className={`nav-link sidebar-project-link${selectedProject?.id === project.id ? " active" : ""}`}
+                  key={project.id}
+                  type="button"
+                  title={project.name}
+                  aria-label={`Ouvrir le tableau ${project.name}`}
+                  aria-current={
+                    selectedProject?.id === project.id ? "page" : undefined
+                  }
+                  onClick={() => onSelectProject(project)}
+                >
+                  <span className="nav-symbol board-symbol" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <span>{project.name}</span>
+                </button>
+              ))
+            ) : (
+              <p className="sidebar-projects-empty">Aucun tableau</p>
+            )}
+          </div>
         )}
       </nav>
       <div className="sidebar-bottom">

@@ -102,7 +102,7 @@ function TaskCard({ task, assignee, onEdit, onDelete }) {
   );
 }
 
-function BoardColumn({ column, tasks, members, onDelete, onAdd }) {
+function BoardColumn({ column, tasks, members, onEdit, onDelete, onAdd }) {
   const { isOver, setNodeRef } = useDroppable({ id: column.id });
 
   return (
@@ -417,6 +417,13 @@ function App() {
     setTasks([]);
   }
 
+  function openProject(project) {
+    setError("");
+    setLoading(true);
+    setTasks([]);
+    setSelectedProject(project);
+  }
+
   if (!authChecked) {
     return <main className="auth-loading">Connexion à votre espace…</main>;
   }
@@ -429,18 +436,19 @@ function App() {
       <Sidebar
         session={session}
         projects={projects}
+        projectsLoading={projectsLoading}
         selectedProject={selectedProject}
         connected={connected}
         userInitials={userInitials}
         companyInitials={initials(session.company.name)}
         onNavigateHome={navigateHome}
+        onSelectProject={openProject}
         onCopyInviteCode={copyInviteCode}
         onLogout={logout}
       />
 
       <main className="main-area" id={selectedProject ? "board" : "home"}>
         <Topbar
-          companyName={session.company.name}
           selectedProject={selectedProject}
           loading={loading}
           projectsLoading={projectsLoading}
@@ -586,12 +594,7 @@ function App() {
                       <button
                         className={`project-card-open project-accent-${index % 3}`}
                         type="button"
-                        onClick={() => {
-                          setError("");
-                          setLoading(true);
-                          setTasks([]);
-                          setSelectedProject(project);
-                        }}
+                        onClick={() => openProject(project)}
                         aria-label={`Ouvrir le tableau ${project.name}`}
                       >
                         <span className="project-card-icon" aria-hidden="true">
