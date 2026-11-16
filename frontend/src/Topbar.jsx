@@ -1,11 +1,17 @@
 function Topbar({
   selectedProject,
   loading,
+  calendarLoading,
+  calendarActive,
   projectsLoading,
   connected,
   onNavigateHome,
 }) {
-  const isLoading = selectedProject ? loading : projectsLoading;
+  const isLoading = selectedProject
+    ? loading
+    : calendarActive
+      ? calendarLoading
+      : projectsLoading;
 
   return (
     <header className="topbar">
@@ -14,6 +20,14 @@ function Topbar({
           <a className="breadcrumb-home" href="#home" onClick={onNavigateHome}>
             Accueil
           </a>
+        ) : calendarActive ? (
+          <>
+            <a className="breadcrumb-home" href="#home" onClick={onNavigateHome}>
+              Accueil
+            </a>
+            <span className="breadcrumb-slash">/</span>
+            <strong aria-current="page">Calendrier</strong>
+          </>
         ) : (
           <span aria-current="page">Accueil</span>
         )}

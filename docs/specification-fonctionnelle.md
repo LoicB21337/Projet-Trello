@@ -16,11 +16,17 @@ Tandem est une application web responsive de gestion de projet. Elle reprend le 
 - Creer, modifier et supprimer des taches dans le tableau ouvert.
 - Renseigner une description et une echeance facultative pour une tache ; afficher l'echeance explicitement sur sa carte, distinctement de la date de creation.
 - Choisir le statut initial et le responsable parmi les membres du tableau ; modifier le statut par glisser-deposer.
+- Acceder au calendrier depuis la barre laterale, sous les tableaux ; il rassemble les taches assignees a l'utilisateur courant et les place a leur echeance, avec une distinction visuelle par statut.
+- Naviguer entre les mois du calendrier. Les taches terminees sont masquees par defaut ; un toggle permet de les afficher en semi-transparence.
 - Rechercher une tache par son titre et afficher les compteurs Kanban.
 - Enregistrer les entreprises, comptes, tableaux, membres et taches dans MongoDB ; le volume Docker conserve les donnees au redemarrage.
 - Signaler l'etat de connexion et afficher les erreurs de requete.
 
 Chaque compte appartient a une seule entreprise dans cette version. Un administrateur peut partager le code d'invitation de son entreprise ; un utilisateur qui le saisit rejoint cette entreprise comme membre.
+
+## Calendrier des taches
+
+Le calendrier est accessible depuis la barre laterale, sous la liste des tableaux. Il rassemble, a leur date d'echeance, les taches auxquelles l'utilisateur courant est assigne dans les tableaux auxquels il a acces. Les taches sans echeance ne sont pas placees dans le calendrier. Leur statut est distingue visuellement. Les taches terminees sont masquees par defaut ; l'utilisateur peut les afficher au moyen d'un toggle, auquel cas elles apparaissent en semi-transparence. La navigation permet de consulter les mois precedents et suivants.
 
 ## Gestion de l'entreprise et des membres
 
