@@ -29,6 +29,7 @@ class ProjectUpdate(BaseModel):
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     status: TaskStatus = "todo"
+    assignee_ids: list[str] = Field(default_factory=list, max_length=100)
     assignee_id: str | None = None
     description: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
@@ -37,6 +38,7 @@ class TaskCreate(BaseModel):
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     status: TaskStatus | None = None
+    assignee_ids: list[str] | None = Field(default=None, max_length=100)
     assignee_id: str | None = None
     description: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
@@ -63,7 +65,11 @@ def serialize_project(project: dict) -> dict:
 
 
 def serialize_task(task: dict) -> dict:
-    assignee_id = task.get("assignee_id")
+    assignee_ids = task.get("assignee_ids")
+    if assignee_ids is None:
+        legacy_assignee_id = task.get("assignee_id")
+        assignee_ids = [legacy_assignee_id] if legacy_assignee_id is not None else []
+    serialized_assignee_ids = [str(assignee_id) for assignee_id in assignee_ids]
     due_at = task.get("due_at")
     if due_at is not None:
         if due_at.tzinfo is None:
@@ -75,7 +81,8 @@ def serialize_task(task: dict) -> dict:
         "project_id": str(task["project_id"]),
         "title": task["title"],
         "status": task["status"],
-        "assignee_id": str(assignee_id) if assignee_id else None,
+        "assignee_ids": serialized_assignee_ids,
+        "assignee_id": serialized_assignee_ids[0] if serialized_assignee_ids else None,
         "created_at": task["created_at"],
         "updated_at": task["updated_at"],
         "description": task.get("description"),
@@ -107,21 +114,33 @@ async def require_project(database, project_id: str, user: dict) -> dict:
     return project
 
 
-async def validate_assignee(database, project: dict, company_id: ObjectId, assignee_id: str | None):
-    if assignee_id is None:
-        return None
-    assignee_object_id = object_id_or_404(assignee_id, "Assignee not found")
-    if assignee_object_id not in project["member_ids"]:
-        raise HTTPException(status_code=422, detail="Assignee must belong to this project")
-    assignee = await database.users.find_one(
-        {
-            "_id": assignee_object_id,
-            "company_id": company_id,
-        }
-    )
-    if assignee is None:
-        raise HTTPException(status_code=422, detail="Assignee must belong to this project")
-    return assignee_object_id
+async def validate_assignees(
+    database, project: dict, company_id: ObjectId, assignee_ids: list[str] | None
+):
+    unique_ids = list(dict.fromkeys(assignee_ids or []))
+    assignee_object_ids = [
+        object_id_or_404(assignee_id, "Assignee not found")
+        for assignee_id in unique_ids
+    ]
+    if any(
+        assignee_id not in project["member_ids"]
+        for assignee_id in assignee_object_ids
+    ):
+        raise HTTPException(
+            status_code=422, detail="Assignees must belong to this project"
+        )
+    if assignee_object_ids:
+        assignee_count = await database.users.count_documents(
+            {
+                "_id": {"$in": assignee_object_ids},
+                "company_id": company_id,
+            }
+        )
+        if assignee_count != len(assignee_object_ids):
+            raise HTTPException(
+                status_code=422, detail="Assignees must belong to this project"
+            )
+    return assignee_object_ids
 
 
 @asynccontextmanager
@@ -321,6 +340,10 @@ async def delete_company_user(
         {"$set": {"created_by": user["_id"]}},
     )
     await database.tasks.update_many(
+        {"company_id": company_id, "assignee_ids": target_id},
+        {"$pull": {"assignee_ids": target_id}},
+    )
+    await database.tasks.update_many(
         {"company_id": company_id, "assignee_id": target_id},
         {"$unset": {"assignee_id": ""}},
     )
@@ -463,8 +486,18 @@ async def create_task(
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=422, detail="Task title cannot be blank")
-    assignee_id = await validate_assignee(
-        database, project, user["company_id"], payload.assignee_id
+    if {"assignee_ids", "assignee_id"}.issubset(payload.model_fields_set):
+        raise HTTPException(
+            status_code=422, detail="Use either assignee_ids or the legacy assignee_id field"
+        )
+    if "assignee_ids" in payload.model_fields_set:
+        requested_assignee_ids = payload.assignee_ids
+    elif payload.assignee_id is not None:
+        requested_assignee_ids = [payload.assignee_id]
+    else:
+        requested_assignee_ids = []
+    assignee_ids = await validate_assignees(
+        database, project, user["company_id"], requested_assignee_ids
     )
     now = datetime.now(timezone.utc)
     task = {
@@ -472,7 +505,7 @@ async def create_task(
         "project_id": project["_id"],
         "title": title,
         "status": payload.status,
-        "assignee_id": assignee_id,
+        "assignee_ids": assignee_ids,
         "description": payload.description,
         "due_at": payload.due_at,
         "created_by": user["_id"],
@@ -497,22 +530,34 @@ async def update_task(
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=422, detail="No task fields to update")
+    if {"assignee_ids", "assignee_id"}.issubset(changes):
+        raise HTTPException(
+            status_code=422, detail="Use either assignee_ids or the legacy assignee_id field"
+        )
     if "title" in changes:
         changes["title"] = (changes["title"] or "").strip()
         if not changes["title"]:
             raise HTTPException(status_code=422, detail="Task title cannot be blank")
     if "assignee_id" in changes:
-        changes["assignee_id"] = await validate_assignee(
-            database, project, user["company_id"], changes["assignee_id"]
+        legacy_assignee_id = changes.pop("assignee_id")
+        changes["assignee_ids"] = (
+            [legacy_assignee_id] if legacy_assignee_id is not None else []
+        )
+    if "assignee_ids" in changes:
+        changes["assignee_ids"] = await validate_assignees(
+            database, project, user["company_id"], changes["assignee_ids"]
         )
     changes["updated_at"] = datetime.now(timezone.utc)
+    update = {"$set": changes}
+    if "assignee_ids" in changes:
+        update["$unset"] = {"assignee_id": ""}
     task = await database.tasks.find_one_and_update(
         {
             "_id": task_object_id,
             "company_id": user["company_id"],
             "project_id": project["_id"],
         },
-        {"$set": changes},
+        update,
         return_document=ReturnDocument.AFTER,
     )
     if task is None:

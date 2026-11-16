@@ -68,7 +68,7 @@ Chaque compte est rattache a une entreprise par `company_id`. Une inscription pa
   "title": "Preparer les maquettes",
   "description": "",
   "status": "todo",
-  "assignee_id": null,
+  "assignee_ids": [],
   "due_at": null,
   "created_by": "ObjectId",
   "created_at": "2026-10-15T10:00:00Z",
@@ -80,9 +80,11 @@ Les valeurs permises pour `status` sont `todo`, `in_progress` et `done`. Les cha
 
 `projects.description` et `tasks.description` sont des chaines (vides si aucune description n'est fournie). `tasks.due_at` est une date BSON UTC ou `null` lorsqu'aucune echeance n'est definie. L'API represente cette date par une chaine ISO-8601, par exemple `2026-10-20T16:30:00Z`. `created_at` reste la date de creation et n'est pas utilisee comme echeance.
 
+`tasks.assignee_ids` est une liste d'identifiants BSON des membres assignes, vide si la tache n'a pas de responsable. Les anciens documents contenant uniquement `assignee_id` sont lus comme une liste a un element ; les nouveaux documents utilisent `assignee_ids`.
+
 ## Calendrier des taches
 
-Le calendrier est une fonctionnalite frontend accessible depuis la barre laterale, sous les tableaux. Pour le remplir, le frontend liste les projets accessibles avec les routes existantes, puis recupere les taches de chacun de ces projets par leurs routes existantes. Il ne conserve que les taches assignees a l'utilisateur courant (`assignee_id`) et ayant une echeance (`due_at`), puis les positionne selon cette echeance dans le mois consulte. Le statut permet de distinguer visuellement les taches. Les taches au statut `done` sont masquees par defaut ; le toggle d'affichage permet de les inclure en semi-transparence. La navigation mensuelle change le mois affiche. Cette fonctionnalite ne requiert ni nouvelle route API ni modification du schema des documents.
+Le calendrier est une fonctionnalite frontend accessible depuis la barre laterale, sous les tableaux. Pour le remplir, le frontend liste les projets accessibles avec les routes existantes, puis recupere les taches de chacun de ces projets par leurs routes existantes. Il ne conserve que les taches dont `assignee_ids` contient l'utilisateur courant et qui ont une echeance (`due_at`), puis les positionne selon cette echeance dans le mois consulte. Chaque evenement ouvre le tableau correspondant. Le statut permet de distinguer visuellement les taches. Les taches au statut `done` sont masquees par defaut ; le toggle d'affichage permet de les inclure en semi-transparence. La navigation mensuelle change le mois affiche.
 
 ## Indexes crees par l'API
 
@@ -95,7 +97,7 @@ Pour chaque requete, l'API derive l'entreprise autorisee de la session et appliq
 
 ## Isolation et autorisations
 
-Le cookie contient les identifiants du compte et de son entreprise. A chaque requete, l'API verifie la signature puis relit le compte avec les deux identifiants. Les projets sont lus ou modifies uniquement si `company_id` correspond et que l'utilisateur figure dans `member_ids`. Les taches sont toujours requetees avec `company_id` et `project_id`; toute affectation est validee contre les membres du projet. Les routes qui recoivent un identifiant de projet ne l'utilisent jamais seules comme autorisation.
+Le cookie contient les identifiants du compte et de son entreprise. A chaque requete, l'API verifie la signature puis relit le compte avec les deux identifiants. Les projets sont lus ou modifies uniquement si `company_id` correspond et que l'utilisateur figure dans `member_ids`. Les taches sont toujours requetees avec `company_id` et `project_id`; chaque identifiant de `assignee_ids` est valide contre les membres du projet et de l'entreprise. Les routes qui recoivent un identifiant de projet ne l'utilisent jamais seules comme autorisation.
 
 ## Contrat API entreprise et membres
 
@@ -112,7 +114,7 @@ L'API expose les informations de l'entreprise courante avec `GET /api/company` :
 - `PATCH /api/company` accepte `{ "name": "Nouveau nom" }`.
 - `DELETE /api/company` renvoie `204 No Content` apres suppression permanente en cascade de l'entreprise, de ses membres, tableaux et taches.
 - `PATCH /api/users/{user_id}` accepte un ou les deux champs facultatifs `display_name` et `email`, par exemple `{ "display_name": "Lea Martin", "email": "lea@example.org" }`.
-- `DELETE /api/users/{user_id}` renvoie `204 No Content`. La suppression retire egalement le membre des tableaux et annule ses affectations aux taches.
+- `DELETE /api/users/{user_id}` renvoie `204 No Content`. La suppression retire egalement le membre des tableaux et l'enleve des listes d'affectation des taches.
 
 Les quatre routes de gestion ci-dessus sont reservees au role `owner`. Un compte `owner` ne peut pas etre supprime via la route de suppression d'un membre. L'interface demande une confirmation avant une suppression de membre et une confirmation explicite pour la suppression permanente de l'entreprise ; apres la suppression de l'entreprise, le proprietaire est deconnecte.
 
@@ -120,8 +122,8 @@ Les quatre routes de gestion ci-dessus sont reservees au role `owner`. Un compte
 
 Les objets projet renvoyes par l'API comprennent `id`, `name`, `description`, `member_ids`, `created_by` et `created_at`. La creation et la modification transmettent la description avec les autres champs projet.
 
-Les objets tache renvoyes par l'API comprennent `id`, `project_id`, `title`, `description`, `status`, `assignee_id`, `due_at`, `created_at` et `updated_at`. `due_at` est `null` ou une date-heure ISO-8601. Les appels de creation et de modification acceptent `description` et `due_at` avec les champs habituels (`title`, `status`, `assignee_id`). La carte frontend nomme explicitement l'echeance et n'utilise pas `created_at` a cette fin.
+Les objets tache renvoyes par l'API comprennent `id`, `project_id`, `title`, `description`, `status`, `assignee_ids`, `assignee_id`, `due_at`, `created_at` et `updated_at`. `assignee_ids` est la liste canonique des responsables. `assignee_id` est conserve pour compatibilite et represente le premier responsable. La creation et la modification acceptent `assignee_ids` ; une liste vide retire toutes les affectations. Elles acceptent egalement l'ancien champ `assignee_id` tant qu'il n'est pas transmis simultanement avec `assignee_ids`. `due_at` est `null` ou une date-heure ISO-8601. La carte frontend nomme explicitement l'echeance et n'utilise pas `created_at` a cette fin.
 
-L'API implemente l'inscription d'une entreprise ou l'adhesion par code, la connexion/deconnexion, la liste des membres, la gestion de l'entreprise et des membres, le CRUD des tableaux, l'assignation de membres et le CRUD des taches avec responsable, description et echeance. Les roles disponibles sont `owner` et `member`; le createur d'un tableau peut le gerer, tandis que les autres membres conservent les droits de travail dans ce tableau.
+L'API implemente l'inscription d'une entreprise ou l'adhesion par code, la connexion/deconnexion, la liste des membres, la gestion de l'entreprise et des membres, le CRUD des tableaux, l'assignation de plusieurs membres a une tache et le CRUD des taches avec responsables, description et echeance. Les roles disponibles sont `owner` et `member`; le createur d'un tableau peut le gerer, tandis que les autres membres conservent les droits de travail dans ce tableau.
 
 MongoDB est lance sans authentification dans le compose de developpement. Il ne doit pas etre expose tel quel en production. Le volume conserve la base lors de `docker compose down`; `docker compose down -v` la supprime.

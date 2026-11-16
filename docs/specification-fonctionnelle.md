@@ -15,7 +15,7 @@ Tandem est une application web responsive de gestion de projet. Elle reprend le 
 - A la creation ou a la modification d'un tableau, choisir les membres de la meme entreprise qui y ont acces.
 - Creer, modifier et supprimer des taches dans le tableau ouvert.
 - Renseigner une description et une echeance facultative pour une tache ; afficher l'echeance explicitement sur sa carte, distinctement de la date de creation.
-- Choisir le statut initial et le responsable parmi les membres du tableau ; modifier le statut par glisser-deposer.
+- Choisir le statut initial et une ou plusieurs personnes responsables parmi les membres du tableau ; modifier le statut par glisser-deposer.
 - Acceder au calendrier depuis la barre laterale, sous les tableaux ; il rassemble les taches assignees a l'utilisateur courant et les place a leur echeance, avec une distinction visuelle par statut.
 - Naviguer entre les mois du calendrier. Les taches terminees sont masquees par defaut ; un toggle permet de les afficher en semi-transparence.
 - Rechercher une tache par son titre et afficher les compteurs Kanban.
@@ -26,11 +26,11 @@ Chaque compte appartient a une seule entreprise dans cette version. Un administr
 
 ## Calendrier des taches
 
-Le calendrier est accessible depuis la barre laterale, sous la liste des tableaux. Il rassemble, a leur date d'echeance, les taches auxquelles l'utilisateur courant est assigne dans les tableaux auxquels il a acces. Les taches sans echeance ne sont pas placees dans le calendrier. Leur statut est distingue visuellement. Les taches terminees sont masquees par defaut ; l'utilisateur peut les afficher au moyen d'un toggle, auquel cas elles apparaissent en semi-transparence. La navigation permet de consulter les mois precedents et suivants.
+Le calendrier est accessible depuis la barre laterale, sous la liste des tableaux. Il rassemble, a leur date d'echeance, les taches auxquelles l'utilisateur courant est assigne dans les tableaux auxquels il a acces. Un clic sur une tache du calendrier ouvre le tableau correspondant. Les taches sans echeance ne sont pas placees dans le calendrier. Leur statut est distingue visuellement. Les taches terminees sont masquees par defaut ; l'utilisateur peut les afficher au moyen d'un toggle, auquel cas elles apparaissent en semi-transparence. La navigation permet de consulter les mois precedents et suivants.
 
 ## Gestion de l'entreprise et des membres
 
-Seul le proprietaire peut utiliser les routes de gestion de l'entreprise et des comptes membres. Il peut modifier le nom de l'entreprise et les champs `display_name` et `email` d'un compte. Un compte ayant le role `owner` ne peut pas etre supprime en tant que membre. La suppression d'un membre supprime aussi ses affectations aux taches et ses droits d'acces aux tableaux. La suppression de l'entreprise est permanente et cascade sur ses donnees dependantes ; l'interface demande une confirmation explicite avant l'appel et deconnecte l'utilisateur apres succes. La suppression d'un tableau demeure distincte : elle supprime ses taches.
+Seul le proprietaire peut utiliser les routes de gestion de l'entreprise et des comptes membres. Il peut modifier le nom de l'entreprise et les champs `display_name` et `email` d'un compte. Un compte ayant le role `owner` ne peut pas etre supprime en tant que membre. La suppression d'un membre le retire des listes de responsables des taches et de ses droits d'acces aux tableaux. La suppression de l'entreprise est permanente et cascade sur ses donnees dependantes ; l'interface demande une confirmation explicite avant l'appel et deconnecte l'utilisateur apres succes. La suppression d'un tableau demeure distincte : elle supprime ses taches.
 
 ## Contrat JSON expose
 
@@ -38,7 +38,8 @@ Seul le proprietaire peut utiliser les routes de gestion de l'entreprise et des 
 - `PATCH /api/company` accepte `{ "name": "..." }`. `DELETE /api/company` reussit avec le statut `204` sans corps.
 - `PATCH /api/users/{user_id}` accepte un objet contenant un ou les deux champs facultatifs `display_name` et `email`. `DELETE /api/users/{user_id}` reussit avec le statut `204` sans corps.
 - Les routes de creation et de modification des tableaux transportent `description` avec `name` et, selon l'operation, `member_ids`. Une description vide est autorisee.
-- Les routes de creation et de modification des taches transportent `description` et `due_at` en plus des champs habituels (`title`, `status`, `assignee_id`). `due_at` est soit `null`/absent, soit une date-heure ISO-8601 ; l'API renvoie sa valeur date-heure ISO-8601.
+- Les routes de creation et de modification des taches transportent `description` et `due_at` en plus des champs habituels (`title`, `status`, `assignee_ids`). `assignee_ids` est une liste d'identifiants de membres du tableau ; une liste vide signifie aucune affectation. L'ancien champ scalaire `assignee_id` reste accepte pour compatibilite.
+- `due_at` est soit `null`/absent, soit une date-heure ISO-8601 ; l'API renvoie sa valeur date-heure ISO-8601.
 
 Exemples des objets renvoyes par les routes de lecture :
 
@@ -68,7 +69,8 @@ Exemples des objets renvoyes par les routes de lecture :
   "title": "Preparer les maquettes",
   "description": "Valider les ecrans avec l'equipe",
   "status": "todo",
-  "assignee_id": null,
+  "assignee_ids": ["user-id"],
+  "assignee_id": "user-id",
   "due_at": "2026-10-20T16:30:00Z",
   "created_at": "2026-10-15T10:00:00Z",
   "updated_at": "2026-10-15T10:00:00Z"
@@ -77,15 +79,17 @@ Exemples des objets renvoyes par les routes de lecture :
 
 `created_at` est la date de creation et ne represente jamais l'echeance.
 
+`assignee_ids` est le champ canonique pour les affectations. Pour compatibilite, l'API accepte encore `assignee_id` et le renvoie avec le premier responsable, ou `null` si la tache n'est pas assignee.
+
 ## Isolation stricte des entreprises
 
-L'entreprise est determinee a partir de la session signee et du compte relu en base, jamais a partir d'un `company_id` fourni par le navigateur. Chaque lecture, modification et suppression de tableau ou de tache est filtree par l'entreprise. L'API verifie aussi que l'utilisateur appartient au tableau et que le responsable d'une tache appartient a la meme entreprise et au meme tableau. Une ressource d'une autre entreprise est traitee comme introuvable.
+L'entreprise est determinee a partir de la session signee et du compte relu en base, jamais a partir d'un `company_id` fourni par le navigateur. Chaque lecture, modification et suppression de tableau ou de tache est filtree par l'entreprise. L'API verifie aussi que l'utilisateur appartient au tableau et que chaque responsable d'une tache appartient a la meme entreprise et au meme tableau. Une ressource d'une autre entreprise est traitee comme introuvable.
 
 ## Parcours nominal
 
 1. L'administrateur cree son compte et son entreprise.
 2. Il partage le code d'invitation ; ses collegues creent leur compte en rejoignant l'entreprise.
 3. Un membre cree un tableau et selectionne les personnes de son entreprise qui y participent.
-4. Les membres creent des taches avec une description et une echeance facultative, les assignent et les font progresser entre les statuts.
+4. Les membres creent des taches avec une description et une echeance facultative, les assignent a une ou plusieurs personnes et les font progresser entre les statuts.
 5. Le proprietaire gere le nom de l'entreprise et ses membres, ou supprime l'entreprise avec confirmation.
 6. MongoDB conserve les donnees et l'API limite chaque operation a l'entreprise et au tableau autorises.
