@@ -10,7 +10,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bson import ObjectId
 from fastapi import HTTPException
-from fastapi.encoders import jsonable_encoder
 from pymongo.errors import DuplicateKeyError
 
 from app.main import (
@@ -99,6 +98,10 @@ class Collection:
     def _apply(document, update):
         for key, value in update.get("$set", {}).items():
             document[key] = value
+        for key, value in update.get("$addToSet", {}).items():
+            document.setdefault(key, [])
+            if value not in document[key]:
+                document[key].append(value)
         for key, value in update.get("$unset", {}).items():
             document.pop(key, None)
         for key, value in update.get("$pull", {}).items():
@@ -108,7 +111,12 @@ class Collection:
 def setup_db():
     company_id, other_company_id = ObjectId(), ObjectId()
     owner_id, member_id, foreign_id = ObjectId(), ObjectId(), ObjectId()
-    project_id, other_project_id = ObjectId(), ObjectId()
+    project_id, member_project_id, creator_project_id, other_project_id = (
+        ObjectId(),
+        ObjectId(),
+        ObjectId(),
+        ObjectId(),
+    )
     task_id, other_task_id = ObjectId(), ObjectId()
     database = SimpleNamespace(
         companies=Collection(
@@ -127,6 +135,8 @@ def setup_db():
         projects=Collection(
             [
                 {"_id": project_id, "company_id": company_id, "member_ids": [owner_id, member_id], "created_by": member_id},
+                {"_id": member_project_id, "company_id": company_id, "member_ids": [member_id], "created_by": owner_id},
+                {"_id": creator_project_id, "company_id": company_id, "member_ids": [], "created_by": member_id},
                 {"_id": other_project_id, "company_id": other_company_id, "member_ids": [foreign_id], "created_by": foreign_id},
             ]
         ),
@@ -170,6 +180,10 @@ class TenantManagementTests(unittest.TestCase):
         database, request, owner, _, _ = setup_db()
         response = invoke(delete_company(request, owner))
         self.assertEqual(response.status_code, 204)
+        set_cookie = response.headers["set-cookie"]
+        self.assertIn("tandem_session=", set_cookie)
+        self.assertIn("Max-Age=0", set_cookie)
+        self.assertIn("Path=/api", set_cookie)
         for collection in (database.tasks, database.projects, database.users):
             self.assertTrue(all(doc["company_id"] != owner["company_id"] for doc in collection.documents))
         self.assertNotIn(owner["company_id"], [doc["_id"] for doc in database.companies.documents])
@@ -182,9 +196,13 @@ class TenantManagementTests(unittest.TestCase):
         task = database.tasks.documents[0]
         self.assertNotIn(member_id, project["member_ids"])
         self.assertEqual(project["created_by"], owner["_id"])
+        self.assertEqual(database.projects.documents[1]["member_ids"], [owner["_id"]])
+        self.assertEqual(database.projects.documents[2]["member_ids"], [owner["_id"]])
+        self.assertNotIn(member_id, database.projects.documents[1]["member_ids"])
+        self.assertNotIn(member_id, database.projects.documents[2]["member_ids"])
         self.assertNotIn("assignee_id", task)
         self.assertEqual(task["created_by"], owner["_id"])
-        self.assertEqual(database.projects.documents[1]["member_ids"], [foreign_id])
+        self.assertEqual(database.projects.documents[3]["member_ids"], [foreign_id])
         self.assertEqual(database.tasks.documents[1]["assignee_id"], foreign_id)
         self.assertIsNone(invoke(database.users.find_one({"_id": member_id})))
 
@@ -267,9 +285,19 @@ class TenantManagementTests(unittest.TestCase):
         )
         persisted_task = invoke(database.tasks.find_one({"_id": ObjectId(task["id"])}))
         self.assertEqual(task["description"], "Task detail")
-        self.assertEqual(task["due_at"], due_at)
+        self.assertEqual(task["due_at"], "2026-12-01T10:30:00+00:00")
         self.assertEqual(persisted_task["due_at"], due_at)
-        self.assertEqual(jsonable_encoder(task)["due_at"], "2026-12-01T10:30:00+00:00")
+        persisted_task["due_at"] = datetime(2026, 12, 1, 10, 30)
+        task_with_naive_due_at = invoke(
+            update_task(
+                project["id"],
+                task["id"],
+                TaskUpdate(description="Updated task detail"),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(task_with_naive_due_at["due_at"], "2026-12-01T10:30:00+00:00")
         updated_task = invoke(
             update_task(
                 project["id"],

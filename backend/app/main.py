@@ -8,7 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 from pymongo import ASCENDING, AsyncMongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from app.auth import get_current_user, router as auth_router, serialize_company
+from app.auth import SESSION_COOKIE, get_current_user, router as auth_router, serialize_company
 from app.settings import settings
 
 TaskStatus = Literal["todo", "in_progress", "done"]
@@ -64,6 +64,12 @@ def serialize_project(project: dict) -> dict:
 
 def serialize_task(task: dict) -> dict:
     assignee_id = task.get("assignee_id")
+    due_at = task.get("due_at")
+    if due_at is not None:
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=timezone.utc)
+        else:
+            due_at = due_at.astimezone(timezone.utc)
     return {
         "id": str(task["_id"]),
         "project_id": str(task["project_id"]),
@@ -73,7 +79,7 @@ def serialize_task(task: dict) -> dict:
         "created_at": task["created_at"],
         "updated_at": task["updated_at"],
         "description": task.get("description"),
-        "due_at": task.get("due_at"),
+        "due_at": due_at.isoformat() if due_at is not None else None,
     }
 
 
@@ -211,7 +217,15 @@ async def delete_company(
     await database.projects.delete_many({"company_id": company_id})
     await database.users.delete_many({"company_id": company_id})
     await database.companies.delete_one({"_id": company_id})
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(
+        key=SESSION_COOKIE,
+        path="/api",
+        secure=settings.auth_cookie_secure,
+        httponly=True,
+        samesite="strict",
+    )
+    return response
 
 
 @app.get("/api/users")
@@ -291,6 +305,13 @@ async def delete_company_user(
     if target.get("role") == "owner":
         raise HTTPException(status_code=403, detail="The company owner cannot be deleted")
 
+    await database.projects.update_many(
+        {
+            "company_id": company_id,
+            "$or": [{"member_ids": target_id}, {"created_by": target_id}],
+        },
+        {"$addToSet": {"member_ids": user["_id"]}},
+    )
     await database.projects.update_many(
         {"company_id": company_id, "member_ids": target_id},
         {"$pull": {"member_ids": target_id}},
