@@ -233,18 +233,23 @@ function App() {
     setError("");
   }
 
+  function clearLocalSession() {
+    setSession(null);
+    setProjects([]);
+    setMembers([]);
+    setSelectedProject(null);
+    setTasks([]);
+    setConnected(false);
+    setWorkspaceDialog(false);
+  }
+
   async function logout() {
     try {
       await request("/api/auth/logout", { method: "POST" });
-    } catch {
-      // The local session must still be cleared when the API is unavailable.
+    } catch (cause) {
+      setError(cause.message);
     } finally {
-      setSession(null);
-      setProjects([]);
-      setMembers([]);
-      setSelectedProject(null);
-      setTasks([]);
-      setConnected(false);
+      clearLocalSession();
     }
   }
 
@@ -564,17 +569,27 @@ function App() {
     try {
       await request(`/api/users/${member.id}`, { method: "DELETE" });
       setMembers((current) => current.filter((item) => item.id !== member.id));
-      setProjects((current) =>
-        current.map((project) => ({
+      const withOwnerAccess = (projectList) =>
+        projectList.map((project) => ({
           ...project,
-          member_ids: project.member_ids.filter((id) => id !== member.id),
-        })),
-      );
+          member_ids: [
+            ...new Set([
+              ...project.member_ids.filter((id) => id !== member.id),
+              session.user.id,
+            ]),
+          ],
+        }));
+      setProjects((current) => withOwnerAccess(current));
       setSelectedProject((current) =>
         current
           ? {
               ...current,
-              member_ids: current.member_ids.filter((id) => id !== member.id),
+              member_ids: [
+                ...new Set([
+                  ...current.member_ids.filter((id) => id !== member.id),
+                  session.user.id,
+                ]),
+              ],
             }
           : current,
       );
@@ -585,6 +600,19 @@ function App() {
             : task,
         ),
       );
+      const refreshedProjects = await request("/api/projects");
+      setProjects(refreshedProjects);
+      const refreshedSelection = selectedProject
+        ? refreshedProjects.find(
+            (project) => project.id === selectedProject.id,
+          )
+        : null;
+      if (refreshedSelection) {
+        setSelectedProject(refreshedSelection);
+      } else if (selectedProject) {
+        setSelectedProject(null);
+        setTasks([]);
+      }
     } catch (cause) {
       setError(cause.message);
     }
@@ -601,8 +629,7 @@ function App() {
     setError("");
     try {
       await request("/api/company", { method: "DELETE" });
-      setWorkspaceDialog(false);
-      await logout();
+      clearLocalSession();
     } catch (cause) {
       setError(cause.message);
     }
