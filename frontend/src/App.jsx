@@ -10,6 +10,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import AuthScreen from "./AuthScreen.jsx";
+import DeadlineCalendar from "./DeadlineCalendar.jsx";
 import Sidebar from "./Sidebar.jsx";
 import Topbar from "./Topbar.jsx";
 import { request } from "./api.js";
@@ -166,7 +167,10 @@ function App() {
   const [members, setMembers] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [activeView, setActiveView] = useState("home");
   const [tasks, setTasks] = useState([]);
+  const [calendarTasks, setCalendarTasks] = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
@@ -204,6 +208,7 @@ function App() {
           setSession({ ...account, company: workspace.company });
           setCompanyName(workspace.company.name);
           setSelectedProject(null);
+          setActiveView("home");
           setConnected(true);
         }
       } catch (cause) {
@@ -228,6 +233,7 @@ function App() {
     setMembers(workspace.members);
     setCompanyName(workspace.company.name);
     setSelectedProject(null);
+    setActiveView("home");
     setTasks([]);
     setConnected(true);
     setError("");
@@ -238,7 +244,10 @@ function App() {
     setProjects([]);
     setMembers([]);
     setSelectedProject(null);
+    setActiveView("home");
     setTasks([]);
+    setCalendarTasks([]);
+    setCalendarLoading(false);
     setConnected(false);
     setWorkspaceDialog(false);
   }
@@ -256,7 +265,7 @@ function App() {
   const selectedProjectId = selectedProject?.id;
 
   useEffect(() => {
-    if (!selectedProjectId) return undefined;
+    if (!selectedProjectId || activeView !== "board") return undefined;
     let active = true;
     request(`/api/projects/${selectedProjectId}/tasks`)
       .then((items) => {
@@ -274,7 +283,36 @@ function App() {
     return () => {
       active = false;
     };
-  }, [selectedProjectId]);
+  }, [activeView, selectedProjectId]);
+
+  useEffect(() => {
+    if (activeView !== "calendar" || !session?.user.id) return undefined;
+    let active = true;
+    Promise.all(
+      projects.map((project) =>
+        request(`/api/projects/${project.id}/tasks`),
+      ),
+    )
+      .then((taskLists) => {
+        if (active) {
+          setCalendarTasks(
+            taskLists
+              .flat()
+              .filter((task) => task.assignee_id === session.user.id),
+          );
+          setConnected(true);
+        }
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      })
+      .finally(() => {
+        if (active) setCalendarLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeView, projects, session?.user.id]);
 
   async function saveProject(event) {
     event.preventDefault();
@@ -328,7 +366,10 @@ function App() {
       setProjects((current) =>
         current.filter((item) => item.id !== project.id),
       );
-      if (selectedProject?.id === project.id) setSelectedProject(null);
+      if (selectedProject?.id === project.id) {
+        setSelectedProject(null);
+        setActiveView("home");
+      }
     } catch (cause) {
       setError(cause.message);
     }
@@ -465,12 +506,21 @@ function App() {
   }
 
   function navigateHome() {
+    setActiveView("home");
     setSelectedProject(null);
     setTasks([]);
   }
 
+  function openCalendar() {
+    if (activeView === "calendar") return;
+    setError("");
+    setCalendarLoading(true);
+    setActiveView("calendar");
+  }
+
   function openProject(project) {
     setError("");
+    setActiveView("board");
     setLoading(true);
     setTasks([]);
     setSelectedProject(project);
@@ -662,26 +712,57 @@ function App() {
         projects={projects}
         projectsLoading={projectsLoading}
         selectedProject={selectedProject}
+        activeView={activeView}
         connected={connected}
         userInitials={userInitials}
         companyInitials={initials(session.company.name)}
         onNavigateHome={navigateHome}
         onSelectProject={openProject}
+        onOpenCalendar={openCalendar}
         onCopyInviteCode={copyInviteCode}
         onManageWorkspace={openWorkspaceDialog}
         onLogout={logout}
       />
 
-      <main className="main-area" id={selectedProject ? "board" : "home"}>
+      <main
+        className="main-area"
+        id={activeView === "calendar" ? "calendar" : selectedProject ? "board" : "home"}
+      >
         <Topbar
-          selectedProject={selectedProject}
+          selectedProject={activeView === "board" ? selectedProject : null}
           loading={loading}
+          calendarLoading={calendarLoading}
+          calendarActive={activeView === "calendar"}
           projectsLoading={projectsLoading}
           connected={connected}
           onNavigateHome={navigateHome}
         />
 
-        {selectedProject ? (
+        {activeView === "calendar" ? (
+          <div className="page-content calendar-page">
+            <section className="project-heading">
+              <div className="project-heading-copy">
+                <div className="eyebrow">
+                  <span className="eyebrow-line" /> VOTRE PLANNING
+                </div>
+                <h1>
+                  Calendrier<span className="title-period">.</span>
+                </h1>
+                <p>Les échéances des tâches qui vous sont assignées.</p>
+              </div>
+            </section>
+            {error && (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            )}
+            {calendarLoading ? (
+              <div className="home-state">Chargement du calendrier…</div>
+            ) : (
+              <DeadlineCalendar tasks={calendarTasks} projects={projects} />
+            )}
+          </div>
+        ) : selectedProject ? (
           <div className="page-content">
             <section className="project-heading">
               <div className="project-heading-copy">

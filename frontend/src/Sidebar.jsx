@@ -5,11 +5,13 @@ function Sidebar({
   projects,
   projectsLoading,
   selectedProject,
+  activeView,
   connected,
   userInitials,
   companyInitials,
   onNavigateHome,
   onSelectProject,
+  onOpenCalendar,
   onCopyInviteCode,
   onManageWorkspace,
   onLogout,
@@ -172,6 +174,19 @@ function Sidebar({
             )}
           </div>
         )}
+        <button
+          className={`nav-link sidebar-calendar-link${activeView === "calendar" ? " active" : ""}`}
+          type="button"
+          aria-label="Ouvrir le calendrier"
+          aria-current={activeView === "calendar" ? "page" : undefined}
+          onClick={onOpenCalendar}
+        >
+          <span className="nav-symbol calendar-symbol" aria-hidden="true">
+            <i />
+            <i />
+          </span>
+          <span>Calendrier</span>
+        </button>
       </nav>
       <div className="sidebar-bottom">
         <span className="sidebar-bottom-mark">{userInitials}</span>

@@ -80,6 +80,10 @@ Les valeurs permises pour `status` sont `todo`, `in_progress` et `done`. Les cha
 
 `projects.description` et `tasks.description` sont des chaines (vides si aucune description n'est fournie). `tasks.due_at` est une date BSON UTC ou `null` lorsqu'aucune echeance n'est definie. L'API represente cette date par une chaine ISO-8601, par exemple `2026-10-20T16:30:00Z`. `created_at` reste la date de creation et n'est pas utilisee comme echeance.
 
+## Calendrier des taches
+
+Le calendrier est une fonctionnalite frontend accessible depuis la barre laterale, sous les tableaux. Pour le remplir, le frontend liste les projets accessibles avec les routes existantes, puis recupere les taches de chacun de ces projets par leurs routes existantes. Il ne conserve que les taches assignees a l'utilisateur courant (`assignee_id`) et ayant une echeance (`due_at`), puis les positionne selon cette echeance dans le mois consulte. Le statut permet de distinguer visuellement les taches. Les taches au statut `done` sont masquees par defaut ; le toggle d'affichage permet de les inclure en semi-transparence. La navigation mensuelle change le mois affiche. Cette fonctionnalite ne requiert ni nouvelle route API ni modification du schema des documents.
+
 ## Indexes crees par l'API
 
 - `users`: index unique sur `email`.
