@@ -22,11 +22,12 @@ const columns = [
 ];
 
 async function loadWorkspace() {
-  const [projects, members] = await Promise.all([
+  const [projects, members, company] = await Promise.all([
     request("/api/projects"),
     request("/api/users"),
+    request("/api/company"),
   ]);
-  return { projects, members };
+  return { projects, members, company };
 }
 
 function initials(name = "") {
@@ -61,12 +62,25 @@ function TaskCard({ task, assignee, onEdit, onDelete }) {
           </span>
         </div>
         <p className="task-title">{task.title}</p>
+        {task.description && (
+          <p className="task-description">{task.description}</p>
+        )}
         <div className="task-card-footer">
           <span className="task-date">
-            {new Date(task.created_at).toLocaleDateString("fr-FR", {
-              day: "2-digit",
-              month: "short",
-            })}
+            {task.due_at ? (
+              <>
+                <strong>Échéance</strong>{" "}
+                {new Date(task.due_at).toLocaleString("fr-FR", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </>
+            ) : (
+              "Sans échéance"
+            )}
           </span>
           <span
             className="task-avatar"
@@ -159,10 +173,17 @@ function App() {
   const [search, setSearch] = useState("");
   const [projectDialog, setProjectDialog] = useState(null);
   const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
   const [projectMemberIds, setProjectMemberIds] = useState([]);
   const [projectSaving, setProjectSaving] = useState(false);
+  const [workspaceDialog, setWorkspaceDialog] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [memberEdits, setMemberEdits] = useState({});
+  const [workspaceSaving, setWorkspaceSaving] = useState(false);
   const [dialogStatus, setDialogStatus] = useState(null);
   const [newTitle, setNewTitle] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newDueAt, setNewDueAt] = useState("");
   const [newAssigneeId, setNewAssigneeId] = useState("");
   const [editingTask, setEditingTask] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -178,9 +199,10 @@ function App() {
         const account = await request("/api/auth/me");
         const workspace = await loadWorkspace();
         if (active) {
-          setSession(account);
           setProjects(workspace.projects);
           setMembers(workspace.members);
+          setSession({ ...account, company: workspace.company });
+          setCompanyName(workspace.company.name);
           setSelectedProject(null);
           setConnected(true);
         }
@@ -201,9 +223,10 @@ function App() {
 
   async function handleAuthenticated(account) {
     const workspace = await loadWorkspace();
-    setSession(account);
+    setSession({ ...account, company: workspace.company });
     setProjects(workspace.projects);
     setMembers(workspace.members);
+    setCompanyName(workspace.company.name);
     setSelectedProject(null);
     setTasks([]);
     setConnected(true);
@@ -213,6 +236,8 @@ function App() {
   async function logout() {
     try {
       await request("/api/auth/logout", { method: "POST" });
+    } catch {
+      // The local session must still be cleared when the API is unavailable.
     } finally {
       setSession(null);
       setProjects([]);
@@ -259,7 +284,11 @@ function App() {
     try {
       const project = await request(path, {
         method: editing ? "PATCH" : "POST",
-        body: JSON.stringify({ name, member_ids: projectMemberIds }),
+        body: JSON.stringify({
+          name,
+          description: projectDescription.trim(),
+          member_ids: projectMemberIds,
+        }),
       });
       setProjects((current) =>
         editing
@@ -271,6 +300,7 @@ function App() {
       }
       setProjectDialog(null);
       setProjectName("");
+      setProjectDescription("");
       setProjectMemberIds([]);
     } catch (cause) {
       setError(cause.message);
@@ -314,6 +344,8 @@ function App() {
         method: editing ? "PATCH" : "POST",
         body: JSON.stringify({
           title,
+          description: newDescription.trim(),
+          due_at: newDueAt ? new Date(newDueAt).toISOString() : null,
           status: dialogStatus,
           assignee_id: newAssigneeId || null,
         }),
@@ -324,6 +356,8 @@ function App() {
           : [...current, task],
       );
       setNewTitle("");
+      setNewDescription("");
+      setNewDueAt("");
       setNewAssigneeId("");
       setEditingTask(null);
       setDialogStatus(null);
@@ -401,6 +435,17 @@ function App() {
   function editTask(task) {
     setEditingTask(task);
     setNewTitle(task.title);
+    setNewDescription(task.description || "");
+    setNewDueAt(
+      task.due_at
+        ? new Date(
+            new Date(task.due_at).getTime() -
+              new Date(task.due_at).getTimezoneOffset() * 60000,
+          )
+            .toISOString()
+            .slice(0, 16)
+        : "",
+    );
     setNewAssigneeId(task.assignee_id || "");
     setDialogStatus(task.status);
   }
@@ -408,6 +453,8 @@ function App() {
   function openTaskDialog(status) {
     setEditingTask(null);
     setNewTitle("");
+    setNewDescription("");
+    setNewDueAt("");
     setNewAssigneeId("");
     setDialogStatus(status);
   }
@@ -424,11 +471,154 @@ function App() {
     setSelectedProject(project);
   }
 
+  function openWorkspaceDialog() {
+    setError("");
+    setCompanyName(session.company.name);
+    setMemberEdits(
+      Object.fromEntries(
+        members.map((member) => [
+          member.id,
+          { display_name: member.display_name, email: member.email },
+        ]),
+      ),
+    );
+    setWorkspaceDialog(true);
+  }
+
+  async function saveCompany(event) {
+    event.preventDefault();
+    const name = companyName.trim();
+    if (!name || workspaceSaving) return;
+    setWorkspaceSaving(true);
+    setError("");
+    try {
+      const savedCompany = await request("/api/company", {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setSession((current) => ({
+        ...current,
+        company: { ...current.company, ...savedCompany, name },
+      }));
+      setCompanyName(name);
+      setWorkspaceDialog(false);
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setWorkspaceSaving(false);
+    }
+  }
+
+  async function saveMember(member) {
+    const edited = memberEdits[member.id];
+    if (!edited || workspaceSaving) return;
+    const changes = {};
+    if (edited.display_name.trim() !== member.display_name) {
+      changes.display_name = edited.display_name.trim();
+    }
+    if (edited.email.trim() !== member.email) {
+      changes.email = edited.email.trim();
+    }
+    if (!Object.keys(changes).length) return;
+    setWorkspaceSaving(true);
+    setError("");
+    try {
+      const savedMember = await request(`/api/users/${member.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(changes),
+      });
+      const updated = { ...member, ...changes, ...savedMember };
+      setMembers((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setMemberEdits((current) => ({
+        ...current,
+        [member.id]: {
+          display_name: updated.display_name,
+          email: updated.email,
+        },
+      }));
+      if (updated.id === session.user.id) {
+        setSession((current) => ({
+          ...current,
+          user: { ...current.user, ...updated },
+        }));
+      }
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setWorkspaceSaving(false);
+    }
+  }
+
+  async function deleteMember(member) {
+    if (
+      member.role === "owner" ||
+      !window.confirm(
+        `Supprimer le membre « ${member.display_name} » ? Ses affectations et ses accès aux tableaux seront retirés.`,
+      )
+    ) {
+      return;
+    }
+    setError("");
+    try {
+      await request(`/api/users/${member.id}`, { method: "DELETE" });
+      setMembers((current) => current.filter((item) => item.id !== member.id));
+      setProjects((current) =>
+        current.map((project) => ({
+          ...project,
+          member_ids: project.member_ids.filter((id) => id !== member.id),
+        })),
+      );
+      setSelectedProject((current) =>
+        current
+          ? {
+              ...current,
+              member_ids: current.member_ids.filter((id) => id !== member.id),
+            }
+          : current,
+      );
+      setTasks((current) =>
+        current.map((task) =>
+          task.assignee_id === member.id
+            ? { ...task, assignee_id: null }
+            : task,
+        ),
+      );
+    } catch (cause) {
+      setError(cause.message);
+    }
+  }
+
+  async function deleteCompany() {
+    if (
+      !window.confirm(
+        `Supprimer définitivement l’entreprise « ${session.company.name} » et toutes ses données (membres, tableaux et tâches) ? Cette action est irréversible. Vous serez déconnecté.`,
+      )
+    ) {
+      return;
+    }
+    setError("");
+    try {
+      await request("/api/company", { method: "DELETE" });
+      setWorkspaceDialog(false);
+      await logout();
+    } catch (cause) {
+      setError(cause.message);
+    }
+  }
+
   if (!authChecked) {
     return <main className="auth-loading">Connexion à votre espace…</main>;
   }
   if (!session) {
-    return <AuthScreen onAuthenticated={handleAuthenticated} />;
+    return (
+      <AuthScreen
+        onAuthenticated={handleAuthenticated}
+        errorMessage={error}
+        onClearError={() => setError("")}
+      />
+    );
   }
 
   return (
@@ -444,6 +634,7 @@ function App() {
         onNavigateHome={navigateHome}
         onSelectProject={openProject}
         onCopyInviteCode={copyInviteCode}
+        onManageWorkspace={openWorkspaceDialog}
         onLogout={logout}
       />
 
@@ -468,6 +659,11 @@ function App() {
                   <span className="title-period">.</span>
                 </h1>
                 <p>Les prochaines étapes, au même endroit.</p>
+                {selectedProject.description && (
+                  <p className="project-description">
+                    {selectedProject.description}
+                  </p>
+                )}
               </div>
               <button
                 className="primary-button"
@@ -561,6 +757,7 @@ function App() {
                 type="button"
                 onClick={() => {
                   setProjectName("");
+                  setProjectDescription("");
                   setProjectMemberIds([]);
                   setProjectDialog({ mode: "create" });
                 }}
@@ -605,6 +802,11 @@ function App() {
                         <span className="project-card-name">
                           {project.name}
                         </span>
+                        {project.description && (
+                          <span className="project-card-description">
+                            {project.description}
+                          </span>
+                        )}
                         <span className="project-card-arrow" aria-hidden="true">
                           ↗
                         </span>
@@ -630,6 +832,9 @@ function App() {
                               title="Renommer"
                               onClick={() => {
                                 setProjectName(project.name);
+                                setProjectDescription(
+                                  project.description || "",
+                                );
                                 setProjectMemberIds(project.member_ids);
                                 setProjectDialog({ mode: "edit", project });
                               }}
@@ -666,6 +871,7 @@ function App() {
                     type="button"
                     onClick={() => {
                       setProjectName("");
+                      setProjectDescription("");
                       setProjectMemberIds([]);
                       setProjectDialog({ mode: "create" });
                     }}
@@ -713,6 +919,11 @@ function App() {
                 ×
               </button>
             </div>
+            {error && (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            )}
             <label className="field-label" htmlFor="project-name">
               Nom du tableau
             </label>
@@ -724,6 +935,16 @@ function App() {
               onChange={(event) => setProjectName(event.target.value)}
               placeholder="Ex. Lancement produit"
               required
+            />
+            <label className="field-label" htmlFor="project-description">
+              Description
+            </label>
+            <textarea
+              id="project-description"
+              rows={3}
+              value={projectDescription}
+              onChange={(event) => setProjectDescription(event.target.value)}
+              placeholder="Contexte et objectifs du tableau"
             />
             <fieldset className="member-fieldset">
               <legend className="field-label">Membres du projet</legend>
@@ -817,6 +1038,11 @@ function App() {
                 ×
               </button>
             </div>
+            {error && (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            )}
             <label className="field-label" htmlFor="task-title">
               Nom de la tâche
             </label>
@@ -828,6 +1054,25 @@ function App() {
               onChange={(event) => setNewTitle(event.target.value)}
               placeholder="Ex. Préparer les maquettes"
               required
+            />
+            <label className="field-label" htmlFor="task-description">
+              Description
+            </label>
+            <textarea
+              id="task-description"
+              rows={3}
+              value={newDescription}
+              onChange={(event) => setNewDescription(event.target.value)}
+              placeholder="Détails utiles pour réaliser la tâche"
+            />
+            <label className="field-label" htmlFor="task-due-at">
+              Échéance (facultative)
+            </label>
+            <input
+              id="task-due-at"
+              type="datetime-local"
+              value={newDueAt}
+              onChange={(event) => setNewDueAt(event.target.value)}
             />
             <label className="field-label" htmlFor="task-status">
               Statut
@@ -882,6 +1127,149 @@ function App() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {workspaceDialog && (
+        <div
+          className="dialog-backdrop"
+          onMouseDown={(event) =>
+            event.target === event.currentTarget && setWorkspaceDialog(false)
+          }
+        >
+          <section
+            className="task-dialog workspace-dialog"
+            aria-labelledby="workspace-dialog-title"
+          >
+            <div className="dialog-heading">
+              <div>
+                <span className="dialog-eyebrow">ADMINISTRATION</span>
+                <h2 id="workspace-dialog-title">Gérer l’entreprise</h2>
+              </div>
+              <button
+                type="button"
+                className="icon-button dialog-close"
+                aria-label="Fermer"
+                onClick={() => setWorkspaceDialog(false)}
+              >
+                ×
+              </button>
+            </div>
+            {error && (
+              <div className="error-banner" role="alert">
+                {error}
+              </div>
+            )}
+            <form className="company-edit-form" onSubmit={saveCompany}>
+              <label className="field-label" htmlFor="company-name-edit">
+                Nom de l’entreprise
+              </label>
+              <div className="company-edit-row">
+                <input
+                  id="company-name-edit"
+                  maxLength={100}
+                  value={companyName}
+                  onChange={(event) => setCompanyName(event.target.value)}
+                  required
+                />
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={workspaceSaving}
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </form>
+
+            <section className="workspace-members" aria-labelledby="members-title">
+              <h3 id="members-title">Membres</h3>
+              <div className="workspace-member-list">
+                {members.map((member) => (
+                  <div className="workspace-member" key={member.id}>
+                    <div className="workspace-member-fields">
+                      <label>
+                        <span>Nom</span>
+                        <input
+                          value={memberEdits[member.id]?.display_name || ""}
+                          maxLength={80}
+                          onChange={(event) =>
+                            setMemberEdits((current) => ({
+                              ...current,
+                              [member.id]: {
+                                ...current[member.id],
+                                display_name: event.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Adresse email</span>
+                        <input
+                          type="email"
+                          value={memberEdits[member.id]?.email || ""}
+                          onChange={(event) =>
+                            setMemberEdits((current) => ({
+                              ...current,
+                              [member.id]: {
+                                ...current[member.id],
+                                email: event.target.value,
+                              },
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div className="workspace-member-actions">
+                      <span className="workspace-member-role">
+                        {member.role === "owner" ? "Propriétaire" : "Membre"}
+                      </span>
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        disabled={workspaceSaving}
+                        onClick={() => saveMember(member)}
+                      >
+                        Enregistrer
+                      </button>
+                      {member.role !== "owner" && (
+                        <button
+                          className="secondary-button member-delete-button"
+                          type="button"
+                          disabled={workspaceSaving}
+                          onClick={() => deleteMember(member)}
+                        >
+                          Supprimer
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="member-management-note">
+                Le propriétaire ne peut pas être supprimé. La suppression d’un
+                membre retire ses affectations et ses accès aux tableaux.
+              </p>
+            </section>
+
+            <div className="company-delete">
+              <div>
+                <strong>Supprimer l’entreprise</strong>
+                <p>
+                  Suppression permanente de l’entreprise, de ses membres, de
+                  ses tableaux et de ses tâches.
+                </p>
+              </div>
+              <button
+                className="secondary-button company-delete-button"
+                type="button"
+                onClick={deleteCompany}
+              >
+                Supprimer définitivement
+              </button>
+            </div>
+          </section>
         </div>
       )}
     </div>
