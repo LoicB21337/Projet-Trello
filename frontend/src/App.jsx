@@ -476,6 +476,13 @@ function App() {
     setSelectedProject(project);
   }
 
+  function editProject(project) {
+    setProjectName(project.name);
+    setProjectDescription(project.description || "");
+    setProjectMemberIds(project.member_ids);
+    setProjectDialog({ mode: "edit", project });
+  }
+
   function openWorkspaceDialog() {
     setError("");
     setCompanyName(session.company.name);
@@ -692,13 +699,24 @@ function App() {
                   </p>
                 )}
               </div>
-              <button
-                className="primary-button"
-                type="button"
-                onClick={() => openTaskDialog("todo")}
-              >
-                <span aria-hidden="true">+</span> Nouvelle tâche
-              </button>
+              <div className="project-heading-actions">
+                {canManageProject(selectedProject) && (
+                  <button
+                    className="secondary-button project-edit-button"
+                    type="button"
+                    onClick={() => editProject(selectedProject)}
+                  >
+                    <span aria-hidden="true">✎</span> Modifier le tableau
+                  </button>
+                )}
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={() => openTaskDialog("todo")}
+                >
+                  <span aria-hidden="true">+</span> Nouvelle tâche
+                </button>
+              </div>
             </section>
 
             <section className="board-toolbar" aria-label="Outils du tableau">
@@ -857,14 +875,7 @@ function App() {
                               type="button"
                               aria-label={`Renommer ${project.name}`}
                               title="Renommer"
-                              onClick={() => {
-                                setProjectName(project.name);
-                                setProjectDescription(
-                                  project.description || "",
-                                );
-                                setProjectMemberIds(project.member_ids);
-                                setProjectDialog({ mode: "edit", project });
-                              }}
+                              onClick={() => editProject(project)}
                             >
                               <span aria-hidden="true">✎</span>
                             </button>
