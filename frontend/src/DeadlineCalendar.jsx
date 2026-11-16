@@ -57,7 +57,7 @@ function monthDates(month) {
   });
 }
 
-function DeadlineCalendar({ tasks = [], projects = [] }) {
+function DeadlineCalendar({ tasks = [], projects = [], onOpenProject }) {
   const [visibleMonth, setVisibleMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -225,31 +225,37 @@ function DeadlineCalendar({ tasks = [], projects = [] }) {
                                 task.dueDate.getMinutes() !== 0;
 
                               return (
-                                <li
-                                  className={`deadline-calendar-task is-${task.status || "unknown"}${task.status === "done" ? " is-completed" : ""}`}
-                                  key={task.id}
-                                  title={`${task.title} · ${projectName} · ${statusLabel}`}
-                                >
-                                  <span className="deadline-calendar-task-status">
-                                    {statusLabel}
-                                  </span>
-                                  <span className="deadline-calendar-task-title">
-                                    {task.title}
-                                  </span>
-                                  <span className="deadline-calendar-task-project">
-                                    {projectName}
-                                  </span>
-                                  {hasTime && (
-                                    <time
-                                      className="deadline-calendar-task-time"
-                                      dateTime={task.due_at}
-                                    >
-                                      {new Intl.DateTimeFormat("fr-FR", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      }).format(task.dueDate)}
-                                    </time>
-                                  )}
+                                <li key={task.id}>
+                                  <button
+                                    className={`deadline-calendar-task is-${task.status || "unknown"}${task.status === "done" ? " is-completed" : ""}`}
+                                    type="button"
+                                    aria-label={`Ouvrir ${task.title} dans le tableau ${projectName}`}
+                                    title={`${task.title} · ${projectName} · ${statusLabel}`}
+                                    onClick={() =>
+                                      onOpenProject?.(task.project_id)
+                                    }
+                                  >
+                                      <span className="deadline-calendar-task-status">
+                                        {statusLabel}
+                                      </span>
+                                      <span className="deadline-calendar-task-title">
+                                        {task.title}
+                                      </span>
+                                      <span className="deadline-calendar-task-project">
+                                        {projectName}
+                                      </span>
+                                      {hasTime && (
+                                        <time
+                                          className="deadline-calendar-task-time"
+                                          dateTime={task.due_at}
+                                        >
+                                          {new Intl.DateTimeFormat("fr-FR", {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                          }).format(task.dueDate)}
+                                        </time>
+                                      )}
+                                  </button>
                                 </li>
                               );
                             })}

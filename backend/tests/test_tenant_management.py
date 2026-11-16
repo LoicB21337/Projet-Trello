@@ -24,6 +24,7 @@ from app.main import (
     delete_company,
     delete_company_user,
     get_company,
+    serialize_task,
     update_company,
     update_company_user,
     update_project,
@@ -142,7 +143,14 @@ def setup_db():
         ),
         tasks=Collection(
             [
-                {"_id": task_id, "company_id": company_id, "project_id": project_id, "assignee_id": member_id, "created_by": member_id},
+                {
+                    "_id": task_id,
+                    "company_id": company_id,
+                    "project_id": project_id,
+                    "assignee_ids": [member_id, owner_id],
+                    "assignee_id": member_id,
+                    "created_by": member_id,
+                },
                 {"_id": other_task_id, "company_id": other_company_id, "project_id": other_project_id, "assignee_id": foreign_id, "created_by": foreign_id},
             ]
         ),
@@ -201,6 +209,7 @@ class TenantManagementTests(unittest.TestCase):
         self.assertNotIn(member_id, database.projects.documents[1]["member_ids"])
         self.assertNotIn(member_id, database.projects.documents[2]["member_ids"])
         self.assertNotIn("assignee_id", task)
+        self.assertEqual(task["assignee_ids"], [owner["_id"]])
         self.assertEqual(task["created_by"], owner["_id"])
         self.assertEqual(database.projects.documents[3]["member_ids"], [foreign_id])
         self.assertEqual(database.tasks.documents[1]["assignee_id"], foreign_id)
@@ -310,6 +319,103 @@ class TenantManagementTests(unittest.TestCase):
         self.assertIsNone(updated_task["description"])
         self.assertIsNone(updated_task["due_at"])
         self.assertIsNone(invoke(database.tasks.find_one({"_id": ObjectId(task["id"])}))["due_at"])
+
+    def test_tasks_accept_multiple_project_assignees_and_keep_legacy_single_assignee_support(self):
+        database, request, owner, member_id, foreign_id = setup_db()
+        project_id = str(database.projects.documents[0]["_id"])
+        task = invoke(
+            create_task(
+                project_id,
+                TaskCreate(
+                    title="Shared task",
+                    assignee_ids=[str(owner["_id"]), str(member_id)],
+                ),
+                request,
+                owner,
+            )
+        )
+        stored_task = invoke(database.tasks.find_one({"_id": ObjectId(task["id"])}))
+        self.assertEqual(
+            task["assignee_ids"], [str(owner["_id"]), str(member_id)]
+        )
+        self.assertEqual(stored_task["assignee_ids"], [owner["_id"], member_id])
+        self.assertEqual(task["assignee_id"], str(owner["_id"]))
+
+        legacy_updated_task = invoke(
+            update_task(
+                project_id,
+                task["id"],
+                TaskUpdate(assignee_id=str(member_id)),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(legacy_updated_task["assignee_ids"], [str(member_id)])
+
+        updated_task = invoke(
+            update_task(
+                project_id,
+                task["id"],
+                TaskUpdate(assignee_ids=[str(owner["_id"]), str(member_id)]),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(
+            updated_task["assignee_ids"], [str(owner["_id"]), str(member_id)]
+        )
+        self.assertNotIn("assignee_id", invoke(database.tasks.find_one({"_id": ObjectId(task["id"])})))
+
+        cleared_task = invoke(
+            update_task(
+                project_id,
+                task["id"],
+                TaskUpdate(assignee_ids=[]),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(cleared_task["assignee_ids"], [])
+        self.assertIsNone(cleared_task["assignee_id"])
+
+        legacy_task = invoke(
+            create_task(
+                project_id,
+                TaskCreate(title="Legacy client", assignee_id=str(member_id)),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(legacy_task["assignee_ids"], [str(member_id)])
+        self.assertEqual(legacy_task["assignee_id"], str(member_id))
+
+        with self.assertRaises(HTTPException) as error:
+            invoke(
+                create_task(
+                    project_id,
+                    TaskCreate(title="Invalid assignee", assignee_ids=[str(foreign_id)]),
+                    request,
+                    owner,
+                )
+            )
+        self.assertEqual(error.exception.status_code, 422)
+
+    def test_legacy_task_documents_serialize_as_single_assignee_lists(self):
+        assignee_id = ObjectId()
+        now = datetime.now(timezone.utc)
+        task = serialize_task(
+            {
+                "_id": ObjectId(),
+                "project_id": ObjectId(),
+                "title": "Legacy task",
+                "status": "todo",
+                "assignee_id": assignee_id,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        self.assertEqual(task["assignee_ids"], [str(assignee_id)])
+        self.assertEqual(task["assignee_id"], str(assignee_id))
 
 
 if __name__ == "__main__":

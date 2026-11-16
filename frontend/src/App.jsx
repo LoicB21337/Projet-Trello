@@ -41,7 +41,12 @@ function initials(name = "") {
     .toLocaleUpperCase("fr");
 }
 
-function TaskCard({ task, assignee, onEdit, onDelete }) {
+function taskAssigneeIds(task) {
+  if (Array.isArray(task.assignee_ids)) return task.assignee_ids;
+  return task.assignee_id ? [task.assignee_id] : [];
+}
+
+function TaskCard({ task, assignees, onEdit, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: task.id,
@@ -84,14 +89,40 @@ function TaskCard({ task, assignee, onEdit, onDelete }) {
             )}
           </span>
           <span
-            className="task-avatar"
+            className="task-assignees"
+            role="group"
             aria-label={
-              assignee
-                ? `Assigné à ${assignee.display_name}`
-                : "Aucun responsable"
+              assignees.length
+                ? `Assignée à ${assignees.map((member) => member.display_name).join(", ")}`
+                : "Aucune personne assignée"
             }
           >
-            {initials(assignee?.display_name || "?")}
+            {assignees.length ? (
+              <>
+                {assignees.slice(0, 3).map((member) => (
+                  <span
+                    className="task-avatar"
+                    key={member.id}
+                    title={member.display_name}
+                    aria-hidden="true"
+                  >
+                    {initials(member.display_name)}
+                  </span>
+                ))}
+                {assignees.length > 3 && (
+                  <span
+                    className="task-avatar task-avatar-overflow"
+                    aria-hidden="true"
+                  >
+                    +{assignees.length - 3}
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="task-avatar" aria-hidden="true">
+                ?
+              </span>
+            )}
           </span>
         </div>
       </article>
@@ -147,7 +178,11 @@ function BoardColumn({ column, tasks, members, onEdit, onDelete, onAdd }) {
           <TaskCard
             key={task.id}
             task={task}
-            assignee={members.find((member) => member.id === task.assignee_id)}
+            assignees={taskAssigneeIds(task)
+              .map((assigneeId) =>
+                members.find((member) => member.id === assigneeId),
+              )
+              .filter(Boolean)}
             onEdit={onEdit}
             onDelete={onDelete}
           />
@@ -188,7 +223,7 @@ function App() {
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newDueAt, setNewDueAt] = useState("");
-  const [newAssigneeId, setNewAssigneeId] = useState("");
+  const [newAssigneeIds, setNewAssigneeIds] = useState([]);
   const [editingTask, setEditingTask] = useState(null);
   const [saving, setSaving] = useState(false);
   const sensors = useSensors(
@@ -298,7 +333,9 @@ function App() {
           setCalendarTasks(
             taskLists
               .flat()
-              .filter((task) => task.assignee_id === session.user.id),
+              .filter((task) =>
+                taskAssigneeIds(task).includes(session.user.id),
+              ),
           );
           setConnected(true);
         }
@@ -393,7 +430,7 @@ function App() {
           description: newDescription.trim(),
           due_at: newDueAt ? new Date(newDueAt).toISOString() : null,
           status: dialogStatus,
-          assignee_id: newAssigneeId || null,
+          assignee_ids: newAssigneeIds,
         }),
       });
       setTasks((current) =>
@@ -404,7 +441,7 @@ function App() {
       setNewTitle("");
       setNewDescription("");
       setNewDueAt("");
-      setNewAssigneeId("");
+      setNewAssigneeIds([]);
       setEditingTask(null);
       setDialogStatus(null);
     } catch (cause) {
@@ -466,6 +503,10 @@ function App() {
   const assignableMembers = projectMembers.length
     ? projectMembers
     : members.filter((member) => member.id === session?.user.id);
+  const selectedAssigneeNames = assignableMembers
+    .filter((member) => newAssigneeIds.includes(member.id))
+    .map((member) => member.display_name)
+    .join(", ");
   const userInitials = initials(
     session?.user.display_name || session?.user.email,
   );
@@ -492,7 +533,7 @@ function App() {
             .slice(0, 16)
         : "",
     );
-    setNewAssigneeId(task.assignee_id || "");
+    setNewAssigneeIds(taskAssigneeIds(task));
     setDialogStatus(task.status);
   }
 
@@ -501,7 +542,7 @@ function App() {
     setNewTitle("");
     setNewDescription("");
     setNewDueAt("");
-    setNewAssigneeId("");
+    setNewAssigneeIds([]);
     setDialogStatus(status);
   }
 
@@ -524,6 +565,15 @@ function App() {
     setLoading(true);
     setTasks([]);
     setSelectedProject(project);
+  }
+
+  function openCalendarProject(projectId) {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) {
+      setError("Le tableau de cette tâche est introuvable.");
+      return;
+    }
+    openProject(project);
   }
 
   function editProject(project) {
@@ -651,11 +701,19 @@ function App() {
           : current,
       );
       setTasks((current) =>
-        current.map((task) =>
-          task.assignee_id === member.id
-            ? { ...task, assignee_id: null }
-            : task,
-        ),
+        current.map((task) => {
+          const currentAssigneeIds = taskAssigneeIds(task);
+          const assigneeIds = currentAssigneeIds.filter(
+            (assigneeId) => assigneeId !== member.id,
+          );
+          return assigneeIds.length === currentAssigneeIds.length
+            ? task
+            : {
+                ...task,
+                assignee_ids: assigneeIds,
+                assignee_id: assigneeIds[0] || null,
+              };
+        }),
       );
       const refreshedProjects = await request("/api/projects");
       setProjects(refreshedProjects);
@@ -759,7 +817,11 @@ function App() {
             {calendarLoading ? (
               <div className="home-state">Chargement du calendrier…</div>
             ) : (
-              <DeadlineCalendar tasks={calendarTasks} projects={projects} />
+              <DeadlineCalendar
+                tasks={calendarTasks}
+                projects={projects}
+                onOpenProject={openCalendarProject}
+              />
             )}
           </div>
         ) : selectedProject ? (
@@ -1207,21 +1269,39 @@ function App() {
                 </option>
               ))}
             </select>
-            <label className="field-label" htmlFor="task-assignee">
-              Responsable
-            </label>
-            <select
-              id="task-assignee"
-              value={newAssigneeId}
-              onChange={(event) => setNewAssigneeId(event.target.value)}
-            >
-              <option value="">Non assignée</option>
-              {assignableMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.display_name}
-                </option>
-              ))}
-            </select>
+            <span className="field-label" id="task-assignee-label">
+              Personnes assignées
+            </span>
+            <details className="assignee-picker">
+              <summary
+                aria-label={`Personnes assignées : ${selectedAssigneeNames || "aucune"}`}
+                title={selectedAssigneeNames || "Aucune personne assignée"}
+              >
+                {selectedAssigneeNames || "Aucune personne assignée"}
+              </summary>
+              <div
+                className="assignee-picker-options"
+                role="group"
+                aria-labelledby="task-assignee-label"
+              >
+                {assignableMembers.map((member) => (
+                  <label className="assignee-picker-option" key={member.id}>
+                    <input
+                      type="checkbox"
+                      checked={newAssigneeIds.includes(member.id)}
+                      onChange={(event) => {
+                        setNewAssigneeIds((current) =>
+                          event.target.checked
+                            ? [...current, member.id]
+                            : current.filter((id) => id !== member.id),
+                        );
+                      }}
+                    />
+                    <span>{member.display_name}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
             <div className="dialog-actions">
               <button
                 className="secondary-button"
