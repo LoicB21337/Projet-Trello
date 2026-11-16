@@ -4,11 +4,11 @@ from typing import Literal
 
 from bson import ObjectId
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from pymongo import ASCENDING, AsyncMongoClient, ReturnDocument
-from pymongo.errors import PyMongoError
+from pymongo.errors import DuplicateKeyError, PyMongoError
 
-from app.auth import get_current_user, router as auth_router
+from app.auth import SESSION_COOKIE, get_current_user, router as auth_router, serialize_company
 from app.settings import settings
 
 TaskStatus = Literal["todo", "in_progress", "done"]
@@ -17,23 +17,38 @@ TaskStatus = Literal["todo", "in_progress", "done"]
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     member_ids: list[str] = Field(default_factory=list, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     member_ids: list[str] | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
 
 
 class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     status: TaskStatus = "todo"
     assignee_id: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    due_at: datetime | None = None
 
 
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     status: TaskStatus | None = None
     assignee_id: str | None = None
+    description: str | None = Field(default=None, max_length=2000)
+    due_at: datetime | None = None
+
+
+class CompanyUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class UserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    email: EmailStr | None = None
 
 
 def serialize_project(project: dict) -> dict:
@@ -43,11 +58,18 @@ def serialize_project(project: dict) -> dict:
         "member_ids": [str(member_id) for member_id in project["member_ids"]],
         "created_by": str(project["created_by"]),
         "created_at": project["created_at"],
+        "description": project.get("description"),
     }
 
 
 def serialize_task(task: dict) -> dict:
     assignee_id = task.get("assignee_id")
+    due_at = task.get("due_at")
+    if due_at is not None:
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=timezone.utc)
+        else:
+            due_at = due_at.astimezone(timezone.utc)
     return {
         "id": str(task["_id"]),
         "project_id": str(task["project_id"]),
@@ -56,7 +78,14 @@ def serialize_task(task: dict) -> dict:
         "assignee_id": str(assignee_id) if assignee_id else None,
         "created_at": task["created_at"],
         "updated_at": task["updated_at"],
+        "description": task.get("description"),
+        "due_at": due_at.isoformat() if due_at is not None else None,
     }
+
+
+def require_owner(user: dict) -> None:
+    if user.get("role") != "owner":
+        raise HTTPException(status_code=403, detail="Only the company owner can manage it")
 
 
 def object_id_or_404(value: str, detail: str) -> ObjectId:
@@ -140,6 +169,65 @@ async def health(request: Request):
     return {"status": "ok"}
 
 
+@app.get("/api/company")
+async def get_company(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    company = await request.app.state.database.companies.find_one(
+        {"_id": user["company_id"]}
+    )
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return serialize_company(company, include_invite_code=True)
+
+
+@app.patch("/api/company")
+async def update_company(
+    payload: CompanyUpdate,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    require_owner(user)
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=422, detail="Company name cannot be blank")
+    company = await request.app.state.database.companies.find_one_and_update(
+        {"_id": user["company_id"]},
+        {"$set": {"name": name}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    return serialize_company(company, include_invite_code=True)
+
+
+@app.delete("/api/company", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_company(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    require_owner(user)
+    database = request.app.state.database
+    company_id = user["company_id"]
+    company = await database.companies.find_one({"_id": company_id})
+    if company is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    await database.tasks.delete_many({"company_id": company_id})
+    await database.projects.delete_many({"company_id": company_id})
+    await database.users.delete_many({"company_id": company_id})
+    await database.companies.delete_one({"_id": company_id})
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(
+        key=SESSION_COOKIE,
+        path="/api",
+        secure=settings.auth_cookie_secure,
+        httponly=True,
+        samesite="strict",
+    )
+    return response
+
+
 @app.get("/api/users")
 async def list_company_users(
     request: Request,
@@ -159,6 +247,89 @@ async def list_company_users(
         }
         for company_user in users
     ]
+
+
+@app.patch("/api/users/{user_id}")
+async def update_company_user(
+    user_id: str,
+    payload: UserUpdate,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    require_owner(user)
+    target_id = object_id_or_404(user_id, "User not found")
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=422, detail="No user fields to update")
+    if "display_name" in changes:
+        changes["display_name"] = (changes["display_name"] or "").strip()
+        if not changes["display_name"]:
+            raise HTTPException(status_code=422, detail="User name cannot be blank")
+    if "email" in changes:
+        if changes["email"] is None:
+            raise HTTPException(status_code=422, detail="Email cannot be blank")
+        changes["email"] = str(changes["email"]).strip().lower()
+    try:
+        updated_user = await request.app.state.database.users.find_one_and_update(
+            {"_id": target_id, "company_id": user["company_id"]},
+            {"$set": changes},
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="This email address is already in use") from None
+    if updated_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "id": str(updated_user["_id"]),
+        "display_name": updated_user["display_name"],
+        "email": updated_user["email"],
+        "role": updated_user["role"],
+    }
+
+
+@app.delete("/api/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_company_user(
+    user_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    require_owner(user)
+    target_id = object_id_or_404(user_id, "User not found")
+    if target_id == user["_id"]:
+        raise HTTPException(status_code=403, detail="You cannot delete your own account")
+    database = request.app.state.database
+    company_id = user["company_id"]
+    target = await database.users.find_one({"_id": target_id, "company_id": company_id})
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "owner":
+        raise HTTPException(status_code=403, detail="The company owner cannot be deleted")
+
+    await database.projects.update_many(
+        {
+            "company_id": company_id,
+            "$or": [{"member_ids": target_id}, {"created_by": target_id}],
+        },
+        {"$addToSet": {"member_ids": user["_id"]}},
+    )
+    await database.projects.update_many(
+        {"company_id": company_id, "member_ids": target_id},
+        {"$pull": {"member_ids": target_id}},
+    )
+    await database.projects.update_many(
+        {"company_id": company_id, "created_by": target_id},
+        {"$set": {"created_by": user["_id"]}},
+    )
+    await database.tasks.update_many(
+        {"company_id": company_id, "assignee_id": target_id},
+        {"$unset": {"assignee_id": ""}},
+    )
+    await database.tasks.update_many(
+        {"company_id": company_id, "created_by": target_id},
+        {"$set": {"created_by": user["_id"]}},
+    )
+    await database.users.delete_one({"_id": target_id, "company_id": company_id})
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/api/projects")
@@ -197,6 +368,7 @@ async def create_project(
         "company_id": user["company_id"],
         "name": name,
         "member_ids": member_ids,
+        "description": payload.description,
         "created_by": user["_id"],
         "created_at": datetime.now(timezone.utc),
     }
@@ -301,6 +473,8 @@ async def create_task(
         "title": title,
         "status": payload.status,
         "assignee_id": assignee_id,
+        "description": payload.description,
+        "due_at": payload.due_at,
         "created_by": user["_id"],
         "created_at": now,
         "updated_at": now,
