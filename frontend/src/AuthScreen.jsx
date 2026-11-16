@@ -2,7 +2,7 @@ import { useState } from "react";
 import { request } from "./api.js";
 import "./AuthScreen.css";
 
-function AuthScreen({ onAuthenticated }) {
+function AuthScreen({ onAuthenticated, errorMessage = "", onClearError }) {
   const [mode, setMode] = useState("login");
   const [joinCompany, setJoinCompany] = useState(false);
   const [displayName, setDisplayName] = useState("");
@@ -18,6 +18,7 @@ function AuthScreen({ onAuthenticated }) {
     if (submitting) return;
     setSubmitting(true);
     setError("");
+    onClearError?.();
     try {
       const payload =
         mode === "login"
@@ -84,6 +85,7 @@ function AuthScreen({ onAuthenticated }) {
               onClick={() => {
                 setMode("login");
                 setError("");
+                onClearError?.();
               }}
             >
               Se connecter
@@ -96,6 +98,7 @@ function AuthScreen({ onAuthenticated }) {
               onClick={() => {
                 setMode("register");
                 setError("");
+                onClearError?.();
               }}
             >
               Créer un compte
@@ -185,9 +188,9 @@ function AuthScreen({ onAuthenticated }) {
               onChange={(event) => setPassword(event.target.value)}
               required
             />
-            {error && (
+            {(error || errorMessage) && (
               <p className="auth-error" role="alert">
-                {error}
+                {error || errorMessage}
               </p>
             )}
             <button className="auth-submit" type="submit" disabled={submitting}>

@@ -145,6 +145,22 @@
   padding-top: 11px;
   border-top: 1px solid var(--line);
 }
+.workspace-manage-button {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 12px;
+  border: 1px solid var(--field-line);
+  border-radius: 4px;
+  background: #f7f9f6;
+  color: var(--green-dark);
+  text-align: left;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.workspace-manage-button:hover {
+  background: var(--green-pale);
+}
 .workspace-invite-row {
   display: flex;
   align-items: center;
@@ -492,7 +508,7 @@
   border: 0;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) 20px;
-  align-items: center;
+  grid-template-rows: auto auto;
   gap: 12px;
   text-align: left;
   background: #e8f0e9;
@@ -534,13 +550,29 @@
   height: 13px;
 }
 .project-card-name {
+  grid-column: 2;
+  grid-row: 1;
   overflow-wrap: anywhere;
   color: inherit;
   font:
     700 16px/1.35 "Manrope",
     sans-serif;
 }
+.project-card-description {
+  grid-column: 2;
+  grid-row: 2;
+  display: -webkit-box;
+  overflow: hidden;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0.78;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
 .project-card-arrow {
+  grid-column: 3;
+  grid-row: 1;
   align-self: start;
   justify-self: end;
   font-size: 15px;
@@ -620,6 +652,12 @@
   margin: 9px 0 0;
   color: #87918b;
   font-size: 13px;
+}
+.project-heading-copy > .project-description {
+  max-width: 680px;
+  margin-top: 7px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .primary-button {
   border: 0;
@@ -932,6 +970,13 @@
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
+.task-description {
+  margin: -5px 0 10px;
+  color: #78847c;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
 .task-card-footer {
   padding-top: 8px;
   border-top: 1px solid #f0f2ef;
@@ -939,6 +984,10 @@
 .task-date {
   color: #99a19c;
   font-size: 9px;
+}
+.task-date strong {
+  color: #69776e;
+  font-weight: 700;
 }
 .task-avatar {
   width: 20px;
@@ -997,6 +1046,8 @@
 }
 .task-dialog {
   width: min(100%, 440px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
   padding: 23px;
   border: 1px solid #e5e9e4;
   border-radius: 8px;
@@ -1036,7 +1087,8 @@
   font-weight: 600;
 }
 .task-dialog input,
-.task-dialog select {
+.task-dialog select,
+.task-dialog textarea {
   width: 100%;
   min-height: 39px;
   border: 1px solid #dfe5df;
@@ -1046,7 +1098,15 @@
   color: #35423b;
   font-size: 12px;
 }
+.task-dialog textarea {
+  min-height: 75px;
+  padding: 9px 10px;
+  resize: vertical;
+}
 .task-dialog input::placeholder {
+  color: #a4aca6;
+}
+.task-dialog textarea::placeholder {
   color: #a4aca6;
 }
 .dialog-actions {
@@ -1066,6 +1126,112 @@
 }
 .secondary-button:hover {
   background: #f5f7f4;
+}
+.workspace-dialog {
+  width: min(100%, 720px);
+}
+.company-edit-form {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.company-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.company-edit-row input {
+  flex: 1;
+  min-width: 0;
+}
+.company-edit-row .primary-button {
+  min-height: 39px;
+  white-space: nowrap;
+}
+.workspace-members {
+  margin-top: 19px;
+}
+.workspace-members h3 {
+  margin: 0 0 10px;
+  color: #38453e;
+  font: 700 13px "Manrope", sans-serif;
+}
+.workspace-member-list {
+  display: grid;
+  gap: 9px;
+}
+.workspace-member {
+  padding: 12px;
+  border: 1px solid #e6eae5;
+  border-radius: 6px;
+}
+.workspace-member-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.workspace-member-fields label {
+  display: grid;
+  gap: 5px;
+  color: #69756e;
+  font-size: 10px;
+  font-weight: 600;
+}
+.workspace-member-fields input {
+  min-width: 0;
+  min-height: 35px;
+}
+.workspace-member-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 9px;
+}
+.workspace-member-actions .secondary-button {
+  min-height: 31px;
+}
+.workspace-member-role {
+  margin-right: auto;
+  color: #7d8981;
+  font-size: 10px;
+}
+.member-delete-button,
+.company-delete-button {
+  color: #9d5143;
+  border-color: #ebd3ce;
+}
+.member-delete-button:hover,
+.company-delete-button:hover {
+  background: #fff5f2;
+}
+.member-management-note {
+  margin: 10px 0 0;
+  color: #78847c;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.company-delete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid #ecd8d3;
+}
+.company-delete strong {
+  color: #8e493d;
+  font-size: 11px;
+}
+.company-delete p {
+  margin: 4px 0 0;
+  color: #8c817e;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.company-delete-button {
+  min-height: 34px;
+  flex: 0 0 auto;
 }
 
 @keyframes fade-in {
@@ -1217,6 +1383,16 @@
     grid-template-columns: repeat(3, minmax(240px, 1fr));
     overflow-x: auto;
     padding-bottom: 10px;
+  }
+  .workspace-dialog {
+    padding: 18px;
+  }
+  .workspace-member-fields {
+    grid-template-columns: 1fr;
+  }
+  .company-delete {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .board-column {
     min-height: 220px;

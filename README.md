@@ -31,13 +31,15 @@ docker compose down -v
 - `compose.yml` : services web, api et mongo ; MongoDB n'est pas expose sur le poste hote.
 - `docs/` : specifications fonctionnelle et technique.
 
-Consulter [la specification fonctionnelle](docs/specification-fonctionnelle.md) et [la specification technique](docs/specification-technique.md).
+Les routes de gestion de l'entreprise et des membres sont reservees au proprietaire. Les structures et regles API sont detaillees dans [la specification fonctionnelle](docs/specification-fonctionnelle.md) et [la specification technique](docs/specification-technique.md).
 
 ## Comptes et entreprises
 
 Au premier lancement, creez un compte et choisissez un nom d'entreprise : l'entreprise et son compte administrateur sont enregistres dans MongoDB. Pour ajouter un collegue, copiez le code d'invitation affiche dans la barre laterale ; celui-ci choisit « Rejoindre une entreprise » lors de son inscription.
 
-Les tableaux appartiennent a une entreprise et leur creation permet de selectionner les membres. Les taches sont propres au tableau, peuvent etre assignees a l'un de ses membres et restent stockees dans MongoDB. La connexion utilise un cookie de session HTTP-only ; l'API derive l'entreprise de la session, verifie l'appartenance au tableau et ne fait pas confiance a un `company_id` fourni par le navigateur.
+Les tableaux appartiennent a une entreprise et leur creation permet de selectionner les membres. Ils peuvent comporter une description. Les taches sont propres au tableau, peuvent etre assignees a l'un de ses membres et ont une description ainsi qu'une echeance facultative (affichee separement de leur date de creation). La connexion utilise un cookie de session HTTP-only ; l'API derive l'entreprise de la session, verifie l'appartenance au tableau et ne fait pas confiance a un `company_id` fourni par le navigateur.
+
+Le proprietaire peut ouvrir « Gerer l'entreprise » depuis le menu de l'entreprise pour renommer celle-ci et modifier ou supprimer les membres. Le compte proprietaire ne peut pas etre supprime comme membre. Supprimer un membre retire aussi ses affectations et ses acces aux tableaux. La suppression de l'entreprise est permanente et en cascade (membres, tableaux et taches) ; elle exige une confirmation explicite et deconnecte le proprietaire.
 
 ## Configuration
 

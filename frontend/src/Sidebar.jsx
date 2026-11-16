@@ -11,6 +11,7 @@ function Sidebar({
   onNavigateHome,
   onSelectProject,
   onCopyInviteCode,
+  onManageWorkspace,
   onLogout,
 }) {
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
@@ -106,6 +107,18 @@ function Sidebar({
                 </button>
               </div>
             </div>
+            {session.user.role === "owner" && (
+              <button
+                className="workspace-manage-button"
+                type="button"
+                onClick={() => {
+                  setWorkspaceOpen(false);
+                  onManageWorkspace();
+                }}
+              >
+                Gérer l’entreprise
+              </button>
+            )}
           </section>
         )}
       </div>
