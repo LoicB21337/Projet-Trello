@@ -74,10 +74,35 @@ function TaskCard({ task, assignees, blockedBy, onEdit, onDelete }) {
           <p className="task-description">{task.description}</p>
         )}
         {task.checklist?.length > 0 && (
-          <p className="task-checklist-progress">
-            ✓ {task.checklist.filter((item) => item.completed).length}/
-            {task.checklist.length} étapes
-          </p>
+          <div className="task-card-checklist">
+            <p className="task-checklist-progress">
+              ✓ {task.checklist.filter((item) => item.completed).length}/
+              {task.checklist.length} sous-tâches
+            </p>
+            <ul
+              className="task-subtask-list"
+              aria-label={`Sous-tâches de ${task.title}`}
+            >
+              {task.checklist.map((item) => (
+                <li
+                  className={`task-subtask-item${item.completed ? " is-completed" : ""}`}
+                  key={item.id}
+                >
+                  <span className="task-subtask-check" aria-hidden="true">
+                    {item.completed ? "✓" : "○"}
+                  </span>
+                  <span className="task-subtask-copy">
+                    <span className="task-subtask-title">{item.text}</span>
+                    {item.description && (
+                      <span className="task-subtask-description">
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {blockedBy.length > 0 && (
           <p
@@ -257,6 +282,7 @@ function App() {
   const [newBlockedByIds, setNewBlockedByIds] = useState([]);
   const [editingTask, setEditingTask] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [checklistSaving, setChecklistSaving] = useState(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor),
@@ -443,10 +469,39 @@ function App() {
     }
   }
 
+  async function updateChecklistItems(checklist) {
+    setNewChecklistItems(checklist);
+    if (!editingTask || !selectedProject) return;
+
+    setChecklistSaving(true);
+    setError("");
+    try {
+      const updatedTask = await request(
+        `/api/projects/${selectedProject.id}/tasks/${editingTask.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ checklist }),
+        },
+      );
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task,
+        ),
+      );
+      setEditingTask((current) =>
+        current?.id === updatedTask.id ? updatedTask : current,
+      );
+    } catch (cause) {
+      setError(cause.message);
+    } finally {
+      setChecklistSaving(false);
+    }
+  }
+
   async function addTask(event) {
     event.preventDefault();
     const title = newTitle.trim();
-    if (!title || saving || !selectedProject) return;
+    if (!title || saving || checklistSaving || !selectedProject) return;
     setSaving(true);
     setError("");
     const editing = editingTask !== null;
@@ -1371,8 +1426,8 @@ function App() {
             </details>
             <TaskChecklistEditor
               items={newChecklistItems}
-              onChange={setNewChecklistItems}
-              disabled={saving}
+              onChange={updateChecklistItems}
+              disabled={saving || checklistSaving}
             />
             <span className="field-label" id="task-dependency-label">
               Tâches à terminer avant celle-ci
@@ -1435,9 +1490,9 @@ function App() {
               <button
                 className="primary-button"
                 type="submit"
-                disabled={saving}
+                disabled={saving || checklistSaving}
               >
-                {saving
+                {saving || checklistSaving
                   ? "Enregistrement…"
                   : editingTask
                     ? "Enregistrer"

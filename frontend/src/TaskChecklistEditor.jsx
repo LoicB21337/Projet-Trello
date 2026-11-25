@@ -103,129 +103,123 @@ function TaskChecklistEditor({ items = [], onChange, disabled = false }) {
     }
   }
 
+  const checklistRows = checklistItems.map((item, index) => {
+    const isEditing = editingId === item.id;
+    const titleId = `task-checklist-edit-title-${index}`;
+    const descriptionId = `task-checklist-edit-description-${index}`;
+
+    return (
+      <li className="task-checklist-editor-item" key={item.id}>
+        <input
+          className="task-checklist-editor-checkbox"
+          type="checkbox"
+          checked={Boolean(item.completed)}
+          disabled={disabled}
+          aria-label={`Marquer « ${item.text} » comme ${
+            item.completed ? "à faire" : "terminé"
+          }`}
+          onChange={() => toggleItem(item.id)}
+        />
+
+        {isEditing ? (
+          <div className="task-checklist-editor-edit">
+            <label className="task-checklist-editor-label" htmlFor={titleId}>
+              Titre
+            </label>
+            <input
+              id={titleId}
+              className="task-checklist-editor-input"
+              type="text"
+              value={editingText}
+              maxLength={MAX_TITLE_LENGTH}
+              required
+              disabled={disabled}
+              autoFocus
+              onChange={(event) => setEditingText(event.target.value)}
+              onKeyDown={(event) => handleEditorKeyDown(event, saveEdit)}
+            />
+            <label
+              className="task-checklist-editor-label"
+              htmlFor={descriptionId}
+            >
+              Description (facultative)
+            </label>
+            <textarea
+              id={descriptionId}
+              className="task-checklist-editor-input task-checklist-editor-textarea"
+              value={editingDescription}
+              maxLength={MAX_DESCRIPTION_LENGTH}
+              disabled={disabled}
+              onChange={(event) => setEditingDescription(event.target.value)}
+            />
+            <div className="task-checklist-editor-actions">
+              <button
+                className="task-checklist-editor-button is-primary"
+                type="button"
+                disabled={disabled || !editingText.trim()}
+                onClick={saveEdit}
+              >
+                Enregistrer
+              </button>
+              <button
+                className="task-checklist-editor-button is-secondary"
+                type="button"
+                disabled={disabled}
+                onClick={cancelEdit}
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="task-checklist-editor-content">
+            <span
+              className={`task-checklist-editor-text${
+                item.completed ? " is-completed" : ""
+              }`}
+            >
+              {item.text}
+            </span>
+            {item.description && (
+              <p className="task-checklist-editor-description">
+                {item.description}
+              </p>
+            )}
+            <div className="task-checklist-editor-actions">
+              <button
+                className="task-checklist-editor-button is-secondary"
+                type="button"
+                disabled={disabled}
+                aria-label={`Modifier ${item.text}`}
+                onClick={() => {
+                  setEditingId(item.id);
+                  setEditingText(item.text);
+                  setEditingDescription(item.description ?? "");
+                }}
+              >
+                Modifier
+              </button>
+              <button
+                className="task-checklist-editor-button is-danger"
+                type="button"
+                disabled={disabled}
+                aria-label={`Supprimer ${item.text}`}
+                onClick={() => removeItem(item.id)}
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        )}
+      </li>
+    );
+  });
+
   return (
     <section
       className="task-checklist-editor"
-      aria-label="Liste de vérification"
+      aria-label="Sous-tâches"
     >
-      {checklistItems.length > 0 && (
-        <ul className="task-checklist-editor-list">
-          {checklistItems.map((item, index) => {
-            const isEditing = editingId === item.id;
-            const titleId = `task-checklist-edit-title-${index}`;
-            const descriptionId = `task-checklist-edit-description-${index}`;
-
-            return (
-              <li className="task-checklist-editor-item" key={item.id}>
-                <input
-                  className="task-checklist-editor-checkbox"
-                  type="checkbox"
-                  checked={Boolean(item.completed)}
-                  disabled={disabled}
-                  aria-label={`Marquer « ${item.text} » comme ${
-                    item.completed ? "à faire" : "terminé"
-                  }`}
-                  onChange={() => toggleItem(item.id)}
-                />
-
-                {isEditing ? (
-                  <div className="task-checklist-editor-edit">
-                    <label className="task-checklist-editor-label" htmlFor={titleId}>
-                      Titre
-                    </label>
-                    <input
-                      id={titleId}
-                      className="task-checklist-editor-input"
-                      type="text"
-                      value={editingText}
-                      maxLength={MAX_TITLE_LENGTH}
-                      required
-                      disabled={disabled}
-                      autoFocus
-                      onChange={(event) => setEditingText(event.target.value)}
-                      onKeyDown={(event) => handleEditorKeyDown(event, saveEdit)}
-                    />
-                    <label
-                      className="task-checklist-editor-label"
-                      htmlFor={descriptionId}
-                    >
-                      Description (facultative)
-                    </label>
-                    <textarea
-                      id={descriptionId}
-                      className="task-checklist-editor-input task-checklist-editor-textarea"
-                      value={editingDescription}
-                      maxLength={MAX_DESCRIPTION_LENGTH}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        setEditingDescription(event.target.value)
-                      }
-                    />
-                    <div className="task-checklist-editor-actions">
-                      <button
-                        className="task-checklist-editor-button is-primary"
-                        type="button"
-                        disabled={disabled || !editingText.trim()}
-                        onClick={saveEdit}
-                      >
-                        Enregistrer
-                      </button>
-                      <button
-                        className="task-checklist-editor-button is-secondary"
-                        type="button"
-                        disabled={disabled}
-                        onClick={cancelEdit}
-                      >
-                        Annuler
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="task-checklist-editor-content">
-                    <span
-                      className={`task-checklist-editor-text${
-                        item.completed ? " is-completed" : ""
-                      }`}
-                    >
-                      {item.text}
-                    </span>
-                    {item.description && (
-                      <p className="task-checklist-editor-description">
-                        {item.description}
-                      </p>
-                    )}
-                    <div className="task-checklist-editor-actions">
-                      <button
-                        className="task-checklist-editor-button is-secondary"
-                        type="button"
-                        disabled={disabled}
-                        aria-label={`Modifier ${item.text}`}
-                        onClick={() => {
-                          setEditingId(item.id);
-                          setEditingText(item.text);
-                          setEditingDescription(item.description ?? "");
-                        }}
-                      >
-                        Modifier
-                      </button>
-                      <button
-                        className="task-checklist-editor-button is-danger"
-                        type="button"
-                        disabled={disabled}
-                        aria-label={`Supprimer ${item.text}`}
-                        onClick={() => removeItem(item.id)}
-                      >
-                        Supprimer
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
       {isAdding ? (
         <div className="task-checklist-editor-add">
           <label className="task-checklist-editor-label" htmlFor="task-checklist-new-title">
@@ -289,6 +283,9 @@ function TaskChecklistEditor({ items = [], onChange, disabled = false }) {
             +
           </button>
         </div>
+      )}
+      {checklistRows.length > 0 && (
+        <ul className="task-checklist-editor-list">{checklistRows}</ul>
       )}
     </section>
   );
