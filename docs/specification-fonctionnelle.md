@@ -15,6 +15,7 @@ Tandem est une application web responsive de gestion de projet. Elle reprend le 
 - A la creation ou a la modification d'un tableau, choisir les membres de la meme entreprise qui y ont acces.
 - Creer, modifier et supprimer des taches dans le tableau ouvert.
 - Renseigner une description et une echeance facultative pour une tache ; afficher l'echeance explicitement sur sa carte, distinctement de la date de creation.
+- Ajouter a une tache une checklist d'etapes, modifier le libelle des etapes, les cocher et suivre leur progression depuis la carte.
 - Choisir le statut initial et une ou plusieurs personnes responsables parmi les membres du tableau ; modifier le statut par glisser-deposer.
 - Acceder au calendrier depuis la barre laterale, sous les tableaux ; il rassemble les taches assignees a l'utilisateur courant et les place a leur echeance, avec une distinction visuelle par statut.
 - Naviguer entre les mois du calendrier. Les taches terminees sont masquees par defaut ; un toggle permet de les afficher en semi-transparence.
@@ -93,3 +94,7 @@ L'entreprise est determinee a partir de la session signee et du compte relu en b
 4. Les membres creent des taches avec une description et une echeance facultative, les assignent a une ou plusieurs personnes et les font progresser entre les statuts.
 5. Le proprietaire gere le nom de l'entreprise et ses membres, ou supprime l'entreprise avec confirmation.
 6. MongoDB conserve les donnees et l'API limite chaque operation a l'entreprise et au tableau autorises.
+
+## Checklists de taches
+
+Chaque tache peut contenir jusqu'a 100 etapes. Une etape possede un identifiant unique dans sa checklist, un libelle de 1 a 200 caracteres et un etat coche/non coche. Les etapes peuvent etre ajoutees, modifiees, cochees ou supprimees dans le formulaire de la tache ; la carte affiche le nombre d'etapes cochees.

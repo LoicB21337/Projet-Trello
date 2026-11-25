@@ -4,7 +4,7 @@ from typing import Literal
 
 from bson import ObjectId
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from pymongo import ASCENDING, AsyncMongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
@@ -12,6 +12,26 @@ from app.auth import SESSION_COOKIE, get_current_user, router as auth_router, se
 from app.settings import settings
 
 TaskStatus = Literal["todo", "in_progress", "done"]
+
+
+class ChecklistItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(ObjectId()), min_length=1, max_length=100)
+    text: str = Field(min_length=1, max_length=200)
+    completed: bool = False
+
+    @field_validator("text")
+    @classmethod
+    def normalize_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Checklist item text cannot be blank")
+        return normalized
+
+
+def validate_checklist_ids(items: list[ChecklistItem] | None):
+    if items is not None and len({item.id for item in items}) != len(items):
+        raise ValueError("Checklist item IDs must be unique")
+    return items
 
 
 class ProjectCreate(BaseModel):
@@ -33,6 +53,12 @@ class TaskCreate(BaseModel):
     assignee_id: str | None = None
     description: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
+    checklist: list[ChecklistItem] = Field(default_factory=list, max_length=100)
+
+    @field_validator("checklist")
+    @classmethod
+    def unique_checklist_ids(cls, items: list[ChecklistItem]) -> list[ChecklistItem]:
+        return validate_checklist_ids(items)
 
 
 class TaskUpdate(BaseModel):
@@ -42,6 +68,14 @@ class TaskUpdate(BaseModel):
     assignee_id: str | None = None
     description: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
+    checklist: list[ChecklistItem] | None = Field(default=None, max_length=100)
+
+    @field_validator("checklist")
+    @classmethod
+    def unique_checklist_ids(
+        cls, items: list[ChecklistItem] | None
+    ) -> list[ChecklistItem] | None:
+        return validate_checklist_ids(items)
 
 
 class CompanyUpdate(BaseModel):
@@ -87,6 +121,14 @@ def serialize_task(task: dict) -> dict:
         "updated_at": task["updated_at"],
         "description": task.get("description"),
         "due_at": due_at.isoformat() if due_at is not None else None,
+        "checklist": [
+            {
+                "id": item["id"],
+                "text": item["text"],
+                "completed": item["completed"],
+            }
+            for item in task.get("checklist", [])
+        ],
     }
 
 
@@ -508,6 +550,7 @@ async def create_task(
         "assignee_ids": assignee_ids,
         "description": payload.description,
         "due_at": payload.due_at,
+        "checklist": [item.model_dump() for item in payload.checklist],
         "created_by": user["_id"],
         "created_at": now,
         "updated_at": now,
@@ -547,6 +590,8 @@ async def update_task(
         changes["assignee_ids"] = await validate_assignees(
             database, project, user["company_id"], changes["assignee_ids"]
         )
+    if "checklist" in changes and changes["checklist"] is not None:
+        changes["checklist"] = [item.model_dump() for item in payload.checklist or []]
     changes["updated_at"] = datetime.now(timezone.utc)
     update = {"$set": changes}
     if "assignee_ids" in changes:
