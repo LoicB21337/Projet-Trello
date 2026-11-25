@@ -54,6 +54,7 @@ class TaskCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
     checklist: list[ChecklistItem] = Field(default_factory=list, max_length=100)
+    blocked_by_ids: list[str] = Field(default_factory=list, max_length=100)
 
     @field_validator("checklist")
     @classmethod
@@ -69,6 +70,7 @@ class TaskUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     due_at: datetime | None = None
     checklist: list[ChecklistItem] | None = Field(default=None, max_length=100)
+    blocked_by_ids: list[str] | None = Field(default=None, max_length=100)
 
     @field_validator("checklist")
     @classmethod
@@ -127,7 +129,10 @@ def serialize_task(task: dict) -> dict:
                 "text": item["text"],
                 "completed": item["completed"],
             }
-            for item in task.get("checklist", [])
+            for item in task.get("checklist") or []
+        ],
+        "blocked_by_ids": [
+            str(task_id) for task_id in task.get("blocked_by_ids") or []
         ],
     }
 
@@ -183,6 +188,75 @@ async def validate_assignees(
                 status_code=422, detail="Assignees must belong to this project"
             )
     return assignee_object_ids
+
+
+async def validate_task_dependencies(
+    database,
+    project: dict,
+    company_id: ObjectId,
+    task_id: ObjectId | None,
+    blocked_by_ids: list[str] | None,
+) -> list[dict]:
+    dependency_ids = list(dict.fromkeys(blocked_by_ids or []))
+    if any(not ObjectId.is_valid(dependency_id) for dependency_id in dependency_ids):
+        raise HTTPException(status_code=422, detail="Invalid prerequisite task")
+    dependency_object_ids = [ObjectId(dependency_id) for dependency_id in dependency_ids]
+    if task_id is not None and task_id in dependency_object_ids:
+        raise HTTPException(status_code=422, detail="A task cannot depend on itself")
+
+    dependencies = []
+    for dependency_id in dependency_object_ids:
+        dependency = await database.tasks.find_one(
+            {
+                "_id": dependency_id,
+                "company_id": company_id,
+                "project_id": project["_id"],
+            }
+        )
+        if dependency is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Prerequisite tasks must belong to this project",
+            )
+        dependencies.append(dependency)
+
+    if task_id is not None:
+        pending = list(dependency_object_ids)
+        visited = set()
+        while pending:
+            candidate_id = pending.pop()
+            if candidate_id == task_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Task dependencies cannot contain a cycle",
+                )
+            if candidate_id in visited:
+                continue
+            visited.add(candidate_id)
+            candidate = await database.tasks.find_one(
+                {
+                    "_id": candidate_id,
+                    "company_id": company_id,
+                    "project_id": project["_id"],
+                }
+            )
+            if candidate is None:
+                continue
+            pending.extend(
+                ObjectId(value)
+                for value in candidate.get("blocked_by_ids", [])
+                if ObjectId.is_valid(value)
+            )
+
+    return dependencies
+
+
+def reject_unfinished_dependencies(dependencies: list[dict]) -> None:
+    if any(dependency.get("status") != "done" for dependency in dependencies):
+        raise HTTPException(
+            status_code=409,
+            detail="Terminez d'abord les taches prerequises.",
+        )
 
 
 @asynccontextmanager
@@ -541,6 +615,15 @@ async def create_task(
     assignee_ids = await validate_assignees(
         database, project, user["company_id"], requested_assignee_ids
     )
+    dependencies = await validate_task_dependencies(
+        database,
+        project,
+        user["company_id"],
+        None,
+        payload.blocked_by_ids,
+    )
+    if payload.status != "todo":
+        reject_unfinished_dependencies(dependencies)
     now = datetime.now(timezone.utc)
     task = {
         "company_id": user["company_id"],
@@ -551,6 +634,7 @@ async def create_task(
         "description": payload.description,
         "due_at": payload.due_at,
         "checklist": [item.model_dump() for item in payload.checklist],
+        "blocked_by_ids": [dependency["_id"] for dependency in dependencies],
         "created_by": user["_id"],
         "created_at": now,
         "updated_at": now,
@@ -570,6 +654,14 @@ async def update_task(
     database = request.app.state.database
     project = await require_project(database, project_id, user)
     task_object_id = object_id_or_404(task_id, "Task not found")
+    task_filter = {
+        "_id": task_object_id,
+        "company_id": user["company_id"],
+        "project_id": project["_id"],
+    }
+    existing_task = await database.tasks.find_one(task_filter)
+    if existing_task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
     changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=422, detail="No task fields to update")
@@ -590,17 +682,42 @@ async def update_task(
         changes["assignee_ids"] = await validate_assignees(
             database, project, user["company_id"], changes["assignee_ids"]
         )
-    if "checklist" in changes and changes["checklist"] is not None:
+    if "checklist" in changes:
         changes["checklist"] = [item.model_dump() for item in payload.checklist or []]
+    dependencies = None
+    if "blocked_by_ids" in changes:
+        dependencies = await validate_task_dependencies(
+            database,
+            project,
+            user["company_id"],
+            task_object_id,
+            changes["blocked_by_ids"] or [],
+        )
+        changes["blocked_by_ids"] = [
+            dependency["_id"] for dependency in dependencies
+        ]
+    effective_status = changes.get("status", existing_task["status"])
+    status_changed = (
+        "status" in changes and effective_status != existing_task["status"]
+    )
+    dependencies_changed = "blocked_by_ids" in changes
+    if effective_status != "todo" and (status_changed or dependencies_changed):
+        if dependencies is None:
+            dependencies = await validate_task_dependencies(
+                database,
+                project,
+                user["company_id"],
+                task_object_id,
+                [str(value) for value in existing_task.get("blocked_by_ids", [])],
+            )
+        reject_unfinished_dependencies(dependencies)
     changes["updated_at"] = datetime.now(timezone.utc)
     update = {"$set": changes}
     if "assignee_ids" in changes:
         update["$unset"] = {"assignee_id": ""}
     task = await database.tasks.find_one_and_update(
         {
-            "_id": task_object_id,
-            "company_id": user["company_id"],
-            "project_id": project["_id"],
+            **task_filter,
         },
         update,
         return_document=ReturnDocument.AFTER,
@@ -619,13 +736,22 @@ async def delete_task(
 ):
     database = request.app.state.database
     project = await require_project(database, project_id, user)
+    task_object_id = object_id_or_404(task_id, "Task not found")
     result = await database.tasks.delete_one(
         {
-            "_id": object_id_or_404(task_id, "Task not found"),
+            "_id": task_object_id,
             "company_id": user["company_id"],
             "project_id": project["_id"],
         }
     )
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Task not found")
+    await database.tasks.update_many(
+        {
+            "company_id": user["company_id"],
+            "project_id": project["_id"],
+            "blocked_by_ids": task_object_id,
+        },
+        {"$pull": {"blocked_by_ids": task_object_id}},
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
