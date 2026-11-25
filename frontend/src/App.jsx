@@ -1250,7 +1250,7 @@ function App() {
           }
         >
           <form
-            className="task-dialog"
+            className="task-dialog task-dialog-wide"
             onSubmit={addTask}
             aria-labelledby="dialog-title"
           >
