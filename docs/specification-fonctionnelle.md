@@ -16,7 +16,7 @@ Tandem est une application web responsive de gestion de projet. Elle reprend le 
 - Creer, modifier et supprimer des taches dans le tableau ouvert.
 - Renseigner une description et une echeance facultative pour une tache ; afficher l'echeance explicitement sur sa carte, distinctement de la date de creation.
 - Definir les taches prealables a une autre tache ; celle-ci reste bloquee tant que tous ses prerequis ne sont pas termines.
-- Ajouter a une tache une checklist d'etapes, modifier le libelle des etapes, les cocher et suivre leur progression depuis la carte.
+- Ajouter a une tache une checklist d'etapes, modifier le libelle et la description des etapes, les cocher et suivre leur progression depuis la carte. La carte affiche la liste des sous-taches ; leur description reste visible tant qu'elles ne sont pas terminees et est masquee une fois cochees.
 - Choisir le statut initial et une ou plusieurs personnes responsables parmi les membres du tableau ; modifier le statut par glisser-deposer.
 - Acceder au calendrier depuis la barre laterale, sous les tableaux ; il rassemble les taches assignees a l'utilisateur courant et les place a leur echeance, avec une distinction visuelle par statut.
 - Naviguer entre les mois du calendrier. Les taches terminees sont masquees par defaut ; un toggle permet de les afficher en semi-transparence.
@@ -49,7 +49,7 @@ L'entreprise est determinee a partir de la session signee et du compte relu en b
 
 ## Checklists de taches
 
-Chaque tache peut contenir jusqu'a 100 sous-taches. Une sous-tache possede un identifiant unique, un titre de 1 a 200 caracteres, une description facultative de 2000 caracteres maximum et un etat coche/non coche. Les sous-taches peuvent etre ajoutees, modifiees, cochees ou supprimees dans le formulaire de la tache ; la carte affiche le nombre d'etapes cochees.
+Chaque tache peut contenir jusqu'a 100 sous-taches. Une sous-tache possede un identifiant unique, un titre de 1 a 200 caracteres, une description facultative de 2000 caracteres maximum et un etat coche/non coche. Les sous-taches peuvent etre ajoutees, modifiees, cochees ou supprimees dans le formulaire de la tache ; la liste y est visible sous l'editeur. Sur la carte, la liste des sous-taches et leur progression sont visibles par tous les utilisateurs. La description d'une sous-tache en cours est affichee integralement, quelle que soit sa longueur ; elle est masquee lorsque la sous-tache est cochee.
 
 ## Dependances entre taches
 
