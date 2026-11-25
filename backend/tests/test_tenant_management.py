@@ -331,7 +331,11 @@ class TenantManagementTests(unittest.TestCase):
                 TaskCreate(
                     title="Task",
                     checklist=[
-                        ChecklistItem(id="step-1", text="  Prepare draft  "),
+                        ChecklistItem(
+                            id="step-1",
+                            text="  Prepare draft  ",
+                            description="  Draft the first version. ",
+                        ),
                         ChecklistItem(id="step-2", text="Review", completed=True),
                     ],
                 ),
@@ -342,8 +346,18 @@ class TenantManagementTests(unittest.TestCase):
         self.assertEqual(
             task["checklist"],
             [
-                {"id": "step-1", "text": "Prepare draft", "completed": False},
-                {"id": "step-2", "text": "Review", "completed": True},
+                {
+                    "id": "step-1",
+                    "text": "Prepare draft",
+                    "description": "  Draft the first version. ",
+                    "completed": False,
+                },
+                {
+                    "id": "step-2",
+                    "text": "Review",
+                    "description": "",
+                    "completed": True,
+                },
             ],
         )
         persisted = invoke(database.tasks.find_one({"_id": ObjectId(task["id"])}))
@@ -360,7 +374,14 @@ class TenantManagementTests(unittest.TestCase):
         )
         self.assertEqual(
             updated["checklist"],
-            [{"id": "step-1", "text": "Draft", "completed": True}],
+            [
+                {
+                    "id": "step-1",
+                    "text": "Draft",
+                    "description": "",
+                    "completed": True,
+                }
+            ],
         )
 
         with self.assertRaises(ValueError):
@@ -594,13 +615,26 @@ class TenantManagementTests(unittest.TestCase):
                 "title": "Legacy task",
                 "status": "todo",
                 "assignee_id": assignee_id,
+                "checklist": [
+                    {"id": "legacy-step", "text": "Legacy step", "completed": False}
+                ],
                 "created_at": now,
                 "updated_at": now,
             }
         )
         self.assertEqual(task["assignee_ids"], [str(assignee_id)])
         self.assertEqual(task["assignee_id"], str(assignee_id))
-        self.assertEqual(task["checklist"], [])
+        self.assertEqual(
+            task["checklist"],
+            [
+                {
+                    "id": "legacy-step",
+                    "text": "Legacy step",
+                    "description": "",
+                    "completed": False,
+                }
+            ],
+        )
 
 
 if __name__ == "__main__":

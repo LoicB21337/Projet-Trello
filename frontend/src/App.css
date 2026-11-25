@@ -1122,6 +1122,9 @@
   box-shadow: 0 22px 70px rgb(20 36 27 / 22%);
   animation: rise-in 0.18s ease-out;
 }
+.task-dialog-wide {
+  width: min(100%, 760px);
+}
 .dialog-heading {
   display: flex;
   align-items: flex-start;

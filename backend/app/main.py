@@ -17,6 +17,7 @@ TaskStatus = Literal["todo", "in_progress", "done"]
 class ChecklistItem(BaseModel):
     id: str = Field(default_factory=lambda: str(ObjectId()), min_length=1, max_length=100)
     text: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
     completed: bool = False
 
     @field_validator("text")
@@ -127,6 +128,7 @@ def serialize_task(task: dict) -> dict:
             {
                 "id": item["id"],
                 "text": item["text"],
+                "description": item.get("description", "") or "",
                 "completed": item["completed"],
             }
             for item in task.get("checklist") or []

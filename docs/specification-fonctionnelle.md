@@ -49,7 +49,7 @@ L'entreprise est determinee a partir de la session signee et du compte relu en b
 
 ## Checklists de taches
 
-Chaque tache peut contenir jusqu'a 100 etapes. Une etape possede un identifiant unique dans sa checklist, un libelle de 1 a 200 caracteres et un etat coche/non coche. Les etapes peuvent etre ajoutees, modifiees, cochees ou supprimees dans le formulaire de la tache ; la carte affiche le nombre d'etapes cochees.
+Chaque tache peut contenir jusqu'a 100 sous-taches. Une sous-tache possede un identifiant unique, un titre de 1 a 200 caracteres, une description facultative de 2000 caracteres maximum et un etat coche/non coche. Les sous-taches peuvent etre ajoutees, modifiees, cochees ou supprimees dans le formulaire de la tache ; la carte affiche le nombre d'etapes cochees.
 
 ## Dependances entre taches
 

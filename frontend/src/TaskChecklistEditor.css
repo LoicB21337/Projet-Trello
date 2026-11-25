@@ -8,26 +8,6 @@
   color: #26312f;
 }
 
-.task-checklist-editor-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.task-checklist-editor-title {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.35;
-}
-
-.task-checklist-editor-count,
-.task-checklist-editor-hint {
-  color: #737e77;
-  font-size: 12px;
-}
-
 .task-checklist-editor-list {
   display: grid;
   gap: 7px;
@@ -39,7 +19,7 @@
 .task-checklist-editor-item {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
   border: 1px solid #e6e9e5;
@@ -51,13 +31,12 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  margin: 0;
+  margin: 3px 0 0;
   accent-color: #477e65;
 }
 
 .task-checklist-editor-text {
   min-width: 0;
-  flex: 1;
   overflow-wrap: anywhere;
   color: #35423b;
   font-size: 14px;
@@ -68,34 +47,34 @@
   text-decoration: line-through;
 }
 
+.task-checklist-editor-content,
+.task-checklist-editor-edit,
+.task-checklist-editor-add {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 7px;
+}
+
+.task-checklist-editor-description {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #657168;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
 .task-checklist-editor-actions,
-.task-checklist-editor-edit-form,
-.task-checklist-editor-add-form {
+.task-checklist-editor-add-control {
   display: flex;
   align-items: center;
   gap: 7px;
 }
 
-.task-checklist-editor-edit-form,
-.task-checklist-editor-add-form {
-  width: 100%;
-  min-width: 0;
-}
-
-.task-checklist-editor-input {
-  width: 100%;
-  min-width: 0;
-  height: 38px;
-  padding: 0 11px;
-  border: 1px solid #dfe5df;
-  border-radius: 6px;
-  background: #fff;
-  color: #26312f;
+.task-checklist-editor-add-control {
+  justify-content: flex-start;
+  color: #35423b;
   font-size: 14px;
-}
-
-.task-checklist-editor-input::placeholder {
-  color: #8a938d;
 }
 
 .task-checklist-editor-button {
@@ -108,6 +87,7 @@
   color: #35423b;
   font-size: 12px;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .task-checklist-editor-button:hover:not(:disabled) {
@@ -115,7 +95,6 @@
 }
 
 .task-checklist-editor-button.is-primary {
-  min-height: 38px;
   border-color: #477e65;
   background: #477e65;
   color: #fff;
@@ -130,41 +109,51 @@
   color: #a34f45;
 }
 
+.task-checklist-editor-button.is-add {
+  width: 30px;
+  min-height: 30px;
+  padding: 0;
+  color: #477e65;
+  font-size: 18px;
+}
+
 .task-checklist-editor-button:disabled,
 .task-checklist-editor-input:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }
 
+.task-checklist-editor-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 11px;
+  border: 1px solid #dfe5df;
+  border-radius: 6px;
+  background: #fff;
+  color: #26312f;
+  font: inherit;
+  font-size: 14px;
+}
+
+.task-checklist-editor-input::placeholder {
+  color: #8a938d;
+}
+
+.task-checklist-editor-textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.task-checklist-editor-label {
+  color: #35423b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .task-checklist-editor :focus-visible {
   outline: 3px solid rgb(76 139 112 / 35%);
   outline-offset: 2px;
-}
-
-.task-checklist-editor-empty {
-  margin: 0 0 14px;
-  padding: 12px;
-  border-radius: 6px;
-  background: #f6f8f6;
-  color: #657168;
-  font-size: 13px;
-  text-align: center;
-}
-
-.task-checklist-editor-hint {
-  margin: 7px 0 0;
-}
-
-.task-checklist-editor-visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 @media (max-width: 520px) {
@@ -176,16 +165,17 @@
     flex-wrap: wrap;
   }
 
+  .task-checklist-editor-checkbox {
+    margin-top: 2px;
+  }
+
+  .task-checklist-editor-content,
+  .task-checklist-editor-edit {
+    flex-basis: calc(100% - 26px);
+  }
+
   .task-checklist-editor-actions {
-    width: 100%;
-    justify-content: flex-end;
-  }
-
-  .task-checklist-editor-edit-form {
     flex-wrap: wrap;
-  }
-
-  .task-checklist-editor-edit-input {
-    flex-basis: 100%;
+    justify-content: flex-end;
   }
 }
