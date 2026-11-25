@@ -12,6 +12,7 @@ import {
 import AuthScreen from "./AuthScreen.jsx";
 import DeadlineCalendar from "./DeadlineCalendar.jsx";
 import Sidebar from "./Sidebar.jsx";
+import TaskChecklistEditor from "./TaskChecklistEditor.jsx";
 import Topbar from "./Topbar.jsx";
 import { request } from "./api.js";
 import "./App.css";
@@ -70,6 +71,12 @@ function TaskCard({ task, assignees, onEdit, onDelete }) {
         <p className="task-title">{task.title}</p>
         {task.description && (
           <p className="task-description">{task.description}</p>
+        )}
+        {task.checklist?.length > 0 && (
+          <p className="task-checklist-progress">
+            ✓ {task.checklist.filter((item) => item.completed).length}/
+            {task.checklist.length} étapes
+          </p>
         )}
         <div className="task-card-footer">
           <span className="task-date">
@@ -224,6 +231,7 @@ function App() {
   const [newDescription, setNewDescription] = useState("");
   const [newDueAt, setNewDueAt] = useState("");
   const [newAssigneeIds, setNewAssigneeIds] = useState([]);
+  const [newChecklistItems, setNewChecklistItems] = useState([]);
   const [editingTask, setEditingTask] = useState(null);
   const [saving, setSaving] = useState(false);
   const sensors = useSensors(
@@ -431,6 +439,7 @@ function App() {
           due_at: newDueAt ? new Date(newDueAt).toISOString() : null,
           status: dialogStatus,
           assignee_ids: newAssigneeIds,
+          checklist: newChecklistItems,
         }),
       });
       setTasks((current) =>
@@ -442,6 +451,7 @@ function App() {
       setNewDescription("");
       setNewDueAt("");
       setNewAssigneeIds([]);
+      setNewChecklistItems([]);
       setEditingTask(null);
       setDialogStatus(null);
     } catch (cause) {
@@ -534,6 +544,7 @@ function App() {
         : "",
     );
     setNewAssigneeIds(taskAssigneeIds(task));
+    setNewChecklistItems(task.checklist || []);
     setDialogStatus(task.status);
   }
 
@@ -543,6 +554,7 @@ function App() {
     setNewDescription("");
     setNewDueAt("");
     setNewAssigneeIds([]);
+    setNewChecklistItems([]);
     setDialogStatus(status);
   }
 
@@ -1302,6 +1314,11 @@ function App() {
                 ))}
               </div>
             </details>
+            <TaskChecklistEditor
+              items={newChecklistItems}
+              onChange={setNewChecklistItems}
+              disabled={saving}
+            />
             <div className="dialog-actions">
               <button
                 className="secondary-button"

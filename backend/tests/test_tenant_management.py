@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from pymongo.errors import DuplicateKeyError
 
 from app.main import (
+    ChecklistItem,
     CompanyUpdate,
     ProjectCreate,
     ProjectUpdate,
@@ -320,6 +321,58 @@ class TenantManagementTests(unittest.TestCase):
         self.assertIsNone(updated_task["due_at"])
         self.assertIsNone(invoke(database.tasks.find_one({"_id": ObjectId(task["id"])}))["due_at"])
 
+    def test_task_checklist_is_trimmed_persisted_updated_and_limited(self):
+        database, request, owner, _, _ = setup_db()
+        project_id = str(database.projects.documents[0]["_id"])
+        task = invoke(
+            create_task(
+                project_id,
+                TaskCreate(
+                    title="Task",
+                    checklist=[
+                        ChecklistItem(id="step-1", text="  Prepare draft  "),
+                        ChecklistItem(id="step-2", text="Review", completed=True),
+                    ],
+                ),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(
+            task["checklist"],
+            [
+                {"id": "step-1", "text": "Prepare draft", "completed": False},
+                {"id": "step-2", "text": "Review", "completed": True},
+            ],
+        )
+        persisted = invoke(database.tasks.find_one({"_id": ObjectId(task["id"])}))
+        self.assertEqual(persisted["checklist"][0]["text"], "Prepare draft")
+
+        updated = invoke(
+            update_task(
+                project_id,
+                task["id"],
+                TaskUpdate(checklist=[ChecklistItem(id="step-1", text="Draft", completed=True)]),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(
+            updated["checklist"],
+            [{"id": "step-1", "text": "Draft", "completed": True}],
+        )
+
+        with self.assertRaises(ValueError):
+            TaskCreate(
+                title="Duplicate IDs",
+                checklist=[
+                    ChecklistItem(id="same", text="One"),
+                    ChecklistItem(id="same", text="Two"),
+                ],
+            )
+        with self.assertRaises(ValueError):
+            ChecklistItem(id="blank", text="   ")
+
     def test_tasks_accept_multiple_project_assignees_and_keep_legacy_single_assignee_support(self):
         database, request, owner, member_id, foreign_id = setup_db()
         project_id = str(database.projects.documents[0]["_id"])
@@ -416,6 +469,7 @@ class TenantManagementTests(unittest.TestCase):
         )
         self.assertEqual(task["assignee_ids"], [str(assignee_id)])
         self.assertEqual(task["assignee_id"], str(assignee_id))
+        self.assertEqual(task["checklist"], [])
 
 
 if __name__ == "__main__":
