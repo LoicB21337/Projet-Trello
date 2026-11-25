@@ -1030,9 +1030,7 @@
 }
 .task-subtask-list {
   display: grid;
-  max-height: 132px;
   gap: 4px;
-  overflow-y: auto;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1063,15 +1061,11 @@
   text-decoration: line-through;
 }
 .task-subtask-description {
-  display: -webkit-box;
-  overflow: hidden;
   color: #87918a;
   font-size: 8px;
   line-height: 1.35;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 .task-blocked {
   margin: -4px 0 10px;

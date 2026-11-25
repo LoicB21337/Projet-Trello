@@ -93,7 +93,7 @@ function TaskCard({ task, assignees, blockedBy, onEdit, onDelete }) {
                   </span>
                   <span className="task-subtask-copy">
                     <span className="task-subtask-title">{item.text}</span>
-                    {item.description && (
+                    {item.description && !item.completed && (
                       <span className="task-subtask-description">
                         {item.description}
                       </span>
