@@ -69,6 +69,7 @@ Chaque compte est rattache a une entreprise par `company_id`. Une inscription pa
   "description": "",
   "status": "todo",
   "assignee_ids": [],
+  "blocked_by_ids": [],
   "checklist": [
     { "id": "step-1", "text": "Valider les ecrans", "completed": false }
   ],
@@ -86,6 +87,8 @@ Les valeurs permises pour `status` sont `todo`, `in_progress` et `done`. Les cha
 `tasks.assignee_ids` est une liste d'identifiants BSON des membres assignes, vide si la tache n'a pas de responsable. Les anciens documents contenant uniquement `assignee_id` sont lus comme une liste a un element ; les nouveaux documents utilisent `assignee_ids`.
 
 `tasks.checklist` est une liste (vide par defaut pour les anciennes taches) d'etapes embarquees dans le document de tache. Chaque element contient un identifiant unique dans la liste, un libelle non vide de 200 caracteres maximum et un booléen `completed`. L'API limite la liste a 100 elements et la renvoie telle quelle dans chaque objet tache.
+
+`tasks.blocked_by_ids` est une liste (vide par defaut pour les anciennes taches) d'identifiants BSON des taches prealables. Toutes les taches ciblees doivent appartenir au meme tableau et a la meme entreprise. L'API refuse les auto-dependances et les cycles ; lors de la suppression d'une tache, elle retire son identifiant des dependances des autres taches du tableau.
 
 ## Calendrier des taches
 
@@ -127,7 +130,7 @@ Les quatre routes de gestion ci-dessus sont reservees au role `owner`. Un compte
 
 Les objets projet renvoyes par l'API comprennent `id`, `name`, `description`, `member_ids`, `created_by` et `created_at`. La creation et la modification transmettent la description avec les autres champs projet.
 
-Les objets tache renvoyes par l'API comprennent `id`, `project_id`, `title`, `description`, `status`, `assignee_ids`, `assignee_id`, `checklist`, `due_at`, `created_at` et `updated_at`. `assignee_ids` est la liste canonique des responsables. `assignee_id` est conserve pour compatibilite et represente le premier responsable. La creation et la modification acceptent `assignee_ids` ; une liste vide retire toutes les affectations. Elles acceptent egalement l'ancien champ `assignee_id` tant qu'il n'est pas transmis simultanement avec `assignee_ids`. `checklist` est une liste optionnelle a la creation et modifiable avec la tache ; chaque element contient `id`, `text` et `completed`. `due_at` est `null` ou une date-heure ISO-8601. La carte frontend nomme explicitement l'echeance et n'utilise pas `created_at` a cette fin.
+Les objets tache renvoyes par l'API comprennent `id`, `project_id`, `title`, `description`, `status`, `assignee_ids`, `assignee_id`, `checklist`, `blocked_by_ids`, `due_at`, `created_at` et `updated_at`. `assignee_ids` est la liste canonique des responsables. `assignee_id` est conserve pour compatibilite et represente le premier responsable. La creation et la modification acceptent `assignee_ids` ; une liste vide retire toutes les affectations. Elles acceptent egalement l'ancien champ `assignee_id` tant qu'il n'est pas transmis simultanement avec `assignee_ids`. `checklist` est une liste optionnelle a la creation et modifiable avec la tache ; chaque element contient `id`, `text` et `completed`. `blocked_by_ids` est une liste optionnelle d'identifiants de taches prealables du meme tableau. Une tache avec des prerequis incomplets ne peut pas passer au statut `in_progress` ou `done` ; cette regle est verifiee par l'API qui renvoie `409 Conflict`. `due_at` est `null` ou une date-heure ISO-8601. La carte frontend nomme explicitement l'echeance et n'utilise pas `created_at` a cette fin.
 
 L'API implemente l'inscription d'une entreprise ou l'adhesion par code, la connexion/deconnexion, la liste des membres, la gestion de l'entreprise et des membres, le CRUD des tableaux, l'assignation de plusieurs membres a une tache et le CRUD des taches avec responsables, description et echeance. Les roles disponibles sont `owner` et `member`; le createur d'un tableau peut le gerer, tandis que les autres membres conservent les droits de travail dans ce tableau.
 

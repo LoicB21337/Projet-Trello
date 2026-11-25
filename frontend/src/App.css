@@ -1025,6 +1025,16 @@
   color: #66836f;
   font-size: 9px;
 }
+.task-blocked {
+  margin: -4px 0 10px;
+  color: #9b6b32;
+  font-size: 9px;
+}
+.task-prerequisite-hint {
+  margin: 7px 0 0;
+  color: #9b6b32;
+  font-size: 10px;
+}
 .task-card-footer {
   padding-top: 8px;
   border-top: 1px solid #f0f2ef;

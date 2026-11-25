@@ -47,10 +47,11 @@ function taskAssigneeIds(task) {
   return task.assignee_id ? [task.assignee_id] : [];
 }
 
-function TaskCard({ task, assignees, onEdit, onDelete }) {
+function TaskCard({ task, assignees, blockedBy, onEdit, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({
       id: task.id,
+      disabled: task.status === "todo" && blockedBy.length > 0,
     });
   const style = transform
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
@@ -76,6 +77,16 @@ function TaskCard({ task, assignees, onEdit, onDelete }) {
           <p className="task-checklist-progress">
             ✓ {task.checklist.filter((item) => item.completed).length}/
             {task.checklist.length} étapes
+          </p>
+        )}
+        {blockedBy.length > 0 && (
+          <p
+            className="task-blocked"
+            title={blockedBy.map((blocker) => blocker.title).join(", ")}
+            aria-label={`Bloquée par ${blockedBy.map((blocker) => blocker.title).join(", ")}`}
+          >
+            En attente de {blockedBy.length} tâche
+            {blockedBy.length > 1 ? "s" : ""}
           </p>
         )}
         <div className="task-card-footer">
@@ -155,7 +166,15 @@ function TaskCard({ task, assignees, onEdit, onDelete }) {
   );
 }
 
-function BoardColumn({ column, tasks, members, onEdit, onDelete, onAdd }) {
+function BoardColumn({
+  column,
+  tasks,
+  allTasks,
+  members,
+  onEdit,
+  onDelete,
+  onAdd,
+}) {
   const { isOver, setNodeRef } = useDroppable({ id: column.id });
 
   return (
@@ -185,6 +204,9 @@ function BoardColumn({ column, tasks, members, onEdit, onDelete, onAdd }) {
           <TaskCard
             key={task.id}
             task={task}
+            blockedBy={(task.blocked_by_ids || [])
+              .map((taskId) => allTasks.find((item) => item.id === taskId))
+              .filter((blocker) => blocker && blocker.status !== "done")}
             assignees={taskAssigneeIds(task)
               .map((assigneeId) =>
                 members.find((member) => member.id === assigneeId),
@@ -232,6 +254,7 @@ function App() {
   const [newDueAt, setNewDueAt] = useState("");
   const [newAssigneeIds, setNewAssigneeIds] = useState([]);
   const [newChecklistItems, setNewChecklistItems] = useState([]);
+  const [newBlockedByIds, setNewBlockedByIds] = useState([]);
   const [editingTask, setEditingTask] = useState(null);
   const [saving, setSaving] = useState(false);
   const sensors = useSensors(
@@ -440,6 +463,7 @@ function App() {
           status: dialogStatus,
           assignee_ids: newAssigneeIds,
           checklist: newChecklistItems,
+          blocked_by_ids: newBlockedByIds,
         }),
       });
       setTasks((current) =>
@@ -452,6 +476,7 @@ function App() {
       setNewDueAt("");
       setNewAssigneeIds([]);
       setNewChecklistItems([]);
+      setNewBlockedByIds([]);
       setEditingTask(null);
       setDialogStatus(null);
     } catch (cause) {
@@ -487,7 +512,16 @@ function App() {
       await request(`/api/projects/${selectedProject.id}/tasks/${taskId}`, {
         method: "DELETE",
       });
-      setTasks((current) => current.filter((item) => item.id !== taskId));
+      setTasks((current) =>
+        current
+          .filter((item) => item.id !== taskId)
+          .map((item) => ({
+            ...item,
+            blocked_by_ids: (item.blocked_by_ids || []).filter(
+              (dependencyId) => dependencyId !== taskId,
+            ),
+          })),
+      );
     } catch (cause) {
       setError(cause.message);
     }
@@ -517,6 +551,13 @@ function App() {
     .filter((member) => newAssigneeIds.includes(member.id))
     .map((member) => member.display_name)
     .join(", ");
+  const selectedDependencyNames = newBlockedByIds
+    .map((taskId) => tasks.find((task) => task.id === taskId)?.title)
+    .filter(Boolean)
+    .join(", ");
+  const hasUnfinishedPrerequisites = newBlockedByIds.some(
+    (taskId) => tasks.find((task) => task.id === taskId)?.status !== "done",
+  );
   const userInitials = initials(
     session?.user.display_name || session?.user.email,
   );
@@ -545,6 +586,7 @@ function App() {
     );
     setNewAssigneeIds(taskAssigneeIds(task));
     setNewChecklistItems(task.checklist || []);
+    setNewBlockedByIds(task.blocked_by_ids || []);
     setDialogStatus(task.status);
   }
 
@@ -555,6 +597,7 @@ function App() {
     setNewDueAt("");
     setNewAssigneeIds([]);
     setNewChecklistItems([]);
+    setNewBlockedByIds([]);
     setDialogStatus(status);
   }
 
@@ -917,6 +960,7 @@ function App() {
                   <BoardColumn
                     key={column.id}
                     column={column}
+                    allTasks={tasks}
                     members={members}
                     tasks={filteredTasks.filter(
                       (task) => task.status === column.id,
@@ -1276,11 +1320,22 @@ function App() {
               onChange={(event) => setDialogStatus(event.target.value)}
             >
               {columns.map((column) => (
-                <option key={column.id} value={column.id}>
+                <option
+                  key={column.id}
+                  value={column.id}
+                  disabled={
+                    column.id !== "todo" && hasUnfinishedPrerequisites
+                  }
+                >
                   {column.label}
                 </option>
               ))}
             </select>
+            {hasUnfinishedPrerequisites && (
+              <p className="task-prerequisite-hint" role="status">
+                Terminez les tâches prérequises avant de démarrer celle-ci.
+              </p>
+            )}
             <span className="field-label" id="task-assignee-label">
               Personnes assignées
             </span>
@@ -1319,6 +1374,53 @@ function App() {
               onChange={setNewChecklistItems}
               disabled={saving}
             />
+            <span className="field-label" id="task-dependency-label">
+              Tâches à terminer avant celle-ci
+            </span>
+            <details className="assignee-picker">
+              <summary
+                aria-label={`Tâches prérequises : ${selectedDependencyNames || "aucune"}`}
+                title={selectedDependencyNames || "Aucune tâche prérequise"}
+              >
+                {selectedDependencyNames || "Aucune tâche prérequise"}
+              </summary>
+              <div
+                className="assignee-picker-options"
+                role="group"
+                aria-labelledby="task-dependency-label"
+              >
+                {tasks.filter((task) => task.id !== editingTask?.id).length ? (
+                  tasks
+                    .filter((task) => task.id !== editingTask?.id)
+                    .map((task) => (
+                      <label
+                        className="assignee-picker-option"
+                        key={task.id}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={newBlockedByIds.includes(task.id)}
+                          disabled={saving}
+                          onChange={(event) =>
+                            setNewBlockedByIds((current) =>
+                              event.target.checked
+                                ? [...current, task.id]
+                                : current.filter((id) => id !== task.id),
+                            )
+                          }
+                        />
+                        <span>
+                          {task.title} ({columns.find((column) => column.id === task.status)?.label || task.status})
+                        </span>
+                      </label>
+                    ))
+                ) : (
+                  <p className="member-empty">
+                    Ajoutez une autre tâche pour définir un prérequis.
+                  </p>
+                )}
+              </div>
+            </details>
             <div className="dialog-actions">
               <button
                 className="secondary-button"

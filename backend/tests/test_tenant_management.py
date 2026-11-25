@@ -24,6 +24,7 @@ from app.main import (
     create_task,
     delete_company,
     delete_company_user,
+    delete_task,
     get_company,
     serialize_task,
     update_company,
@@ -372,6 +373,136 @@ class TenantManagementTests(unittest.TestCase):
             )
         with self.assertRaises(ValueError):
             ChecklistItem(id="blank", text="   ")
+
+    def test_task_dependencies_block_start_and_reject_cycles_or_foreign_tasks(self):
+        database, request, owner, _, _ = setup_db()
+        foreign_task_id = database.tasks.documents[1]["_id"]
+        project_id = str(database.projects.documents[0]["_id"])
+        prerequisite = invoke(
+            create_task(project_id, TaskCreate(title="Prerequisite"), request, owner)
+        )
+        dependent = invoke(
+            create_task(
+                project_id,
+                TaskCreate(
+                    title="Dependent",
+                    blocked_by_ids=[prerequisite["id"]],
+                ),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(dependent["blocked_by_ids"], [prerequisite["id"]])
+        stored_dependent = invoke(
+            database.tasks.find_one({"_id": ObjectId(dependent["id"])})
+        )
+        self.assertEqual(stored_dependent["blocked_by_ids"], [ObjectId(prerequisite["id"])])
+
+        with self.assertRaises(HTTPException) as error:
+            invoke(
+                update_task(
+                    project_id,
+                    dependent["id"],
+                    TaskUpdate(blocked_by_ids=[dependent["id"]]),
+                    request,
+                    owner,
+                )
+            )
+        self.assertEqual(error.exception.status_code, 422)
+
+        with self.assertRaises(HTTPException) as error:
+            invoke(
+                update_task(
+                    project_id,
+                    dependent["id"],
+                    TaskUpdate(status="in_progress"),
+                    request,
+                    owner,
+                )
+            )
+        self.assertEqual(error.exception.status_code, 409)
+
+        with self.assertRaises(HTTPException) as error:
+            invoke(
+                create_task(
+                    project_id,
+                    TaskCreate(
+                        title="Started too early",
+                        status="in_progress",
+                        blocked_by_ids=[prerequisite["id"]],
+                    ),
+                    request,
+                    owner,
+                )
+            )
+        self.assertEqual(error.exception.status_code, 409)
+
+        with self.assertRaises(HTTPException) as error:
+            invoke(
+                create_task(
+                    project_id,
+                    TaskCreate(
+                        title="Foreign prerequisite",
+                        blocked_by_ids=[str(foreign_task_id)],
+                    ),
+                    request,
+                    owner,
+                )
+            )
+        self.assertEqual(error.exception.status_code, 422)
+
+        invoke(
+            update_task(
+                project_id,
+                prerequisite["id"],
+                TaskUpdate(status="done"),
+                request,
+                owner,
+            )
+        )
+        updated_dependent = invoke(
+            update_task(
+                project_id,
+                dependent["id"],
+                TaskUpdate(status="in_progress"),
+                request,
+                owner,
+            )
+        )
+        self.assertEqual(updated_dependent["status"], "in_progress")
+
+        with self.assertRaises(HTTPException) as error:
+            invoke(
+                update_task(
+                    project_id,
+                    prerequisite["id"],
+                    TaskUpdate(blocked_by_ids=[dependent["id"]]),
+                    request,
+                    owner,
+                )
+            )
+        self.assertEqual(error.exception.status_code, 422)
+
+    def test_deleting_task_removes_it_from_remaining_prerequisite_lists(self):
+        database, request, owner, _, _ = setup_db()
+        project_id = str(database.projects.documents[0]["_id"])
+        prerequisite = invoke(
+            create_task(project_id, TaskCreate(title="Prerequisite"), request, owner)
+        )
+        dependent = invoke(
+            create_task(
+                project_id,
+                TaskCreate(title="Dependent", blocked_by_ids=[prerequisite["id"]]),
+                request,
+                owner,
+            )
+        )
+        response = invoke(delete_task(project_id, prerequisite["id"], request, owner))
+        self.assertEqual(response.status_code, 204)
+        remaining = invoke(
+            database.tasks.find_one({"_id": ObjectId(dependent["id"])})
+        )
+        self.assertEqual(remaining["blocked_by_ids"], [])
 
     def test_tasks_accept_multiple_project_assignees_and_keep_legacy_single_assignee_support(self):
         database, request, owner, member_id, foreign_id = setup_db()
